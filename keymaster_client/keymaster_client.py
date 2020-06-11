@@ -95,5 +95,5 @@ def main(server: KeymasterAPI, config_scheme: ConfigScheme, daemon_config: dict)
                                           private_key=daemon_config.get('private_key'))
         except Exception as exc: # pylint: disable=broad-except
             LOGGER.error(f'caught exception: {exc}')
-        LOGGER.debug(f"Waiting {daemon_config['sync_frequency']} seconds until next sync")
-        time.sleep(daemon_config['sync_frequency'])
+        LOGGER.debug(f"Waiting {daemon_config['sync_period']} seconds until next sync")
+        time.sleep(daemon_config['sync_period'])

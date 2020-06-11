@@ -37,14 +37,17 @@ def get_daemon_config(config_dir: str) -> dict:
         "server_url": "...",
         "private_key": "...",   # for case where we need same private key on multiple servers
         "network_name": "...",
-        "sync_frequency": 60,
+        "sync_period": 60,
         "config_scheme": "wg"   # currently, "wg" is the only option
     }
     ```
     """
     config_path = os.path.join(config_dir, 'config.json')
-    with open(config_path, 'r') as infile:
-        config = json.load(infile)
+    try:
+        with open(config_path, 'r') as infile:
+            config = json.load(infile)
+    except FileNotFoundError:
+        raise FileNotFoundError(f'No config file found at {config_path}. Config is required.')
 
     # check for required keys
     required_keys = [
@@ -55,22 +58,22 @@ def get_daemon_config(config_dir: str) -> dict:
             raise AttributeError(f'key {key} is not present in config but is required')
 
     # set defaults for keys that aren't required
-    if config.get('sync_frequency') is None:
-        config['sync_frequency'] = 60
-    if config.get('network_name') is None:
+    if not config.get('sync_period'):
+        config['sync_period'] = 60
+    if not config.get('network_name'):
         config['network_name'] = 'default'
-    if config.get('config_scheme') is None:
+    if not config.get('config_scheme'):
         config['config_scheme'] = 'wg'
 
     # validation
-    if not config['config_scheme'] == 'wg':
+    if config['config_scheme'] != 'wg':
         raise ValueError(f"{config['config_scheme']} is not a valid config scheme")
 
     return config
 
 
 def initialize_logging(level):
-    """Initalizes the root logger."""
+    """Initializes logging."""
     stream_handler = logging.StreamHandler(stream=sys.stdout)
     stream_handler.setLevel(level)
     fmt_string = '%(asctime)s %(levelname)s %(filename)s:%(funcName)s: %(message)s'
