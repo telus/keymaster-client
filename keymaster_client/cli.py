@@ -33,13 +33,13 @@ def main(config_dir: str, log_level: str):
 def get_daemon_config(config_dir: str) -> dict:
     """Gets config from the config file. Config file format:
     ```
-        {
-            "server_url": "...",
-            "private_key": "...",   # for case where we need same private key on multiple servers
-            "network_name": "...",
-            "sync_frequency": 60,
-            "config_scheme": "wg"   # currently, "wg" is the only option
-        }
+    {
+        "server_url": "...",
+        "private_key": "...",   # for case where we need same private key on multiple servers
+        "network_name": "...",
+        "sync_frequency": 60,
+        "config_scheme": "wg"   # currently, "wg" is the only option
+    }
     ```
     """
     config_path = os.path.join(config_dir, 'config.json')
@@ -51,7 +51,8 @@ def get_daemon_config(config_dir: str) -> dict:
         'server_url'
     ]
     for key in required_keys:
-        config[key]
+        if not key in config:
+            raise AttributeError(f'key {key} is not present in config but is required')
 
     # set defaults for keys that aren't required
     if config.get('sync_frequency') is None:

@@ -1,3 +1,4 @@
+"""Contains the core logic of keymaster-client."""
 import time
 import logging
 
@@ -37,6 +38,17 @@ def parse_from_upstream(config: dict) -> dict:
 
 def configure_wireguard_interface(server: KeymasterAPI, config_scheme: ConfigScheme,
                                   wg_config: dict, private_key: str = None):
+    """An idempotent function that compares the current configured interface
+    (if previously configured) to the one represented by `wg_config`, which
+    is meant to be received from keymaster-server. Always leaves the interface
+    in the state described by `wg_config`, with one exception: when `private_key`
+    is defined. In this case, `private_key` takes precedence over any other
+    private key present. This is so that keymaster-client can be made to
+    have the same configuration on multiple servers.
+
+    An addition purpose of `configure_wireguard_interface` is to notify
+    keymaster-server of any changes to the public key for the interface
+    it configures."""
     api_interface_id = wg_config['interface']['_id']
     interface_name = wg_config['interface']['name']
     api_public_key = wg_config['interface'].get('public_key')
@@ -75,12 +87,13 @@ def configure_wireguard_interface(server: KeymasterAPI, config_scheme: ConfigSch
 
 
 def main(server: KeymasterAPI, config_scheme: ConfigScheme, daemon_config: dict):
+    """The main loop of the keymaster-client daemon."""
     while True:
         try:
             wg_config = server.get_config(daemon_config['network_name'])
             configure_wireguard_interface(server, config_scheme, wg_config,
                                           private_key=daemon_config.get('private_key'))
-        except Exception as exc:
+        except Exception as exc: # pylint: disable=broad-except
             LOGGER.error(f'caught exception: {exc}')
         LOGGER.debug(f"Waiting {daemon_config['sync_frequency']} seconds until next sync")
         time.sleep(daemon_config['sync_frequency'])

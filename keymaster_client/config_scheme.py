@@ -1,3 +1,4 @@
+"""Defines the ConfigScheme abstract base class, and classes that implement it."""
 import abc
 import subprocess
 import json
@@ -16,18 +17,19 @@ class ConfigScheme(abc.ABC):
 
     @abc.abstractmethod
     def interface_exists(self, interface_name: str) -> bool:
-        """Tests whether an interface with a specific name exists."""
+        """Tests whether the interface with name `interface_name` exists."""
 
     @abc.abstractmethod
     def read(self, interface_name: str) -> wg.WireguardInterface:
-        """Reads a WireguardInterface from the system with name `name`."""
+        """Reads the interface by the name of `interface_name` from the system,
+        and returns it as a WireguardInterface."""
 
     @abc.abstractmethod
     def write(self, interface: wg.WireguardInterface):
-        """Writes a WireguardInterface to the system config."""
+        """Writes a WireguardInterface to the system."""
 
 
-class wgConfigScheme(ConfigScheme):
+class wgConfigScheme(ConfigScheme): # pylint: disable=invalid-name
     """In this scheme config is persisted to the system in three places:
 
     - via the `wg` command
