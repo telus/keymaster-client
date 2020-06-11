@@ -1,0 +1,10 @@
+bump2version
+coverage
+pdoc3
+pip
+pylint
+pytest
+pytest-mock
+pytest-runner
+twine
+wheel
