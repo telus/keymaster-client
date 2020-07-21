@@ -110,7 +110,10 @@ class wgConfigScheme(ConfigScheme): # pylint: disable=invalid-name
         return addresses
 
 
-class uciConfigScheme(ConfigScheme):
+class uciConfigScheme(ConfigScheme): # pylint: disable=invalid-name
+    """`uciConfigScheme` uses the OpenWrt project's `uci` (universal configuration
+    interface) tool to configure wireguard interfaces. For more information see
+    the OpenWrt documentation on wireguard configuration."""
 
     def __init__(self):
         # validation
@@ -218,7 +221,8 @@ class uciConfigScheme(ConfigScheme):
                 capture_output=True, check=True)
 
         if interface.listen_port is not None:
-            run(['uci', 'add_list', f'network.{interface.name}.listen_port={interface.listen_port}'],
+            run(['uci', 'add_list',
+                 f'network.{interface.name}.listen_port={interface.listen_port}'],
                 capture_output=True, check=True)
 
         if interface.fw_mark is not None:
@@ -237,7 +241,8 @@ class uciConfigScheme(ConfigScheme):
         # commit changes
         run(['uci', 'commit', 'network'], capture_output=True, check=True)
 
-    def _write_peer(self, peer: wg.WireguardPeer, interface_name: str, peer_number: int):
+    @staticmethod
+    def _write_peer(peer: wg.WireguardPeer, interface_name: str, peer_number: int):
         """Writes a WireguardPeer to UCI. Peer record in UCI does not need to be
         deleted here; `uciConfigScheme.write` takes care of that since it
         is in a better position to do so."""
@@ -269,7 +274,8 @@ class uciConfigScheme(ConfigScheme):
                  f'network.{node_name}.persistent_keepalive={peer.persistent_keepalive}'],
                 capture_output=True, check=True)
 
-    def _get_uci_peer_names(self, interface_name: str) -> List[str]:
+    @staticmethod
+    def _get_uci_peer_names(interface_name: str) -> List[str]:
         """Under UCI, peers are like interfaces but rather than being of the form
         `network.{interface_name}=interface`, they are of the form
         `network.{peer_name}=wireguard_{interface_name}. This function gets all
