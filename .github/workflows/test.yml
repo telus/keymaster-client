@@ -1,0 +1,35 @@
+# This workflow runs pytest against any push to any branch that isn't
+# master or a release branch
+name: Unit Tests
+
+on:
+  push:
+    branches-ignore: [release/*, master]
+    
+jobs:
+  version:
+    runs-on: ubuntu-latest
+    # set up matrix of python versions
+    strategy:
+      max-parallel: 4
+      matrix:
+        # we'll add 3.9 when it comes out: https://www.python.org/dev/peps/pep-0596/#schedule
+        python-version: [3.8]
+    steps:
+      - uses: actions/checkout@v2
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Set up Python ${{ matrix.python-version }}
+        uses: actions/setup-python@v1.1.1
+        with:
+          python-version: ${{ matrix.python-version }}
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt -r requirements_dev.txt
+          
+      - name: Test
+        run: pytest
