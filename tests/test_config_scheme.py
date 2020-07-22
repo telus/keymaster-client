@@ -1,29 +1,9 @@
 # -*- coding: utf-8 -*-
-
 """Tests for wireguard in keymaster_client package."""
 
-import pytest
-
-from copy import deepcopy
 from subprocess import CompletedProcess
-from io import StringIO
 
 from keymaster_client.config_scheme import uciConfigScheme
-
-
-BASE_PEER = {
-    'public_key': 'asdfasdfasdf',
-    'allowed_ips': ['192.168.1.0/24']
-}
-
-BASE_INTERFACE = {
-    'name': 'wg0',
-    'addresses': ['223.224.225.226/24'],
-    'private_key': 'asdfasdfasdfasdf',
-    'peers': [BASE_PEER]
-}
-
-
 
 
 def test_uci_config_scheme_read_peer(mocker):
