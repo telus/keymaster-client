@@ -1,0 +1,80 @@
+name: Lint & Test & Version
+
+on:
+  push:
+    branches: [master]
+    
+jobs:
+  version:
+    runs-on: ubuntu-latest
+    # don't run if the commit was made by gitbot (ie: this workflow)
+    if: "!contains(github.event.head_commit.message, '[gitbot]')"
+    # set up matrix of python versions
+    strategy:
+      max-parallel: 4
+      matrix:
+        # we'll add 3.9 when it comes out: https://www.python.org/dev/peps/pep-0596/#schedule
+        python-version: [3.8]
+    steps:
+      - uses: actions/checkout@v2
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Set up Python ${{ matrix.python-version }}
+        uses: actions/setup-python@v1.1.1
+        with:
+          python-version: ${{ matrix.python-version }}
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt -r requirements_dev.txt
+          
+      - name: Lint
+        run: pylint --exit-zero keymaster_client
+        
+      - name: Test
+        run: pytest
+
+      # Get secrets for AF and the GitHub PAT for pushes
+      # see https://github.community/t5/GitHub-Actions/Pushes-by-GitHub-Actions-using-GITHUB-TOKEN-should-be-able-to/td-p/40579
+      - name: Install credstash
+        run: sudo pip3 install credstash
+      - name: Fetch secrets
+        run: |
+          # failures in the set-env command don't cause the workflow to fail.
+          # calling this and then running set-env should flag up errors
+          _PAT=$(credstash get github_token)
+          echo "::set-env name=GITHUB_PAT::${_PAT}"
+        env:
+          AWS_ACCESS_KEY_ID: ${{ secrets.CREDSTASH_ACCESS_KEY }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.CREDSTASH_SECRET_KEY }}
+          AWS_DEFAULT_REGION: ca-central-1        
+
+      # if tests are successful, bump version and push to releases
+      - name: Bump Version
+        run: |
+          # get things set up
+          sudo pip3 install bump2version
+          git config --global user.email "shaun@samsite.ca"
+          git config --global user.name "Shaun Martin"
+          
+          # bump the patch version, commit, and tag.
+          bump2version patch --message "[gitbot] autobump: {current_version} → {new_version}"
+          
+          # get the new tag and extract major.minor version for the release branch name.
+          export NEWTAG="$(git tag --sort -v:refname | head -n 1)"
+          export MAJORMINOR="v$(cat VERSION | cut -f1,2 -d.)"
+          echo "Major/Minor Version: ${MAJORMINOR}"
+          
+          # create remote URL using github's provided info
+          export REMOTE=https://inhumantsar:${GITHUB_PAT}@github.com/${GITHUB_REPOSITORY}.git
+          
+          # checkout or create the release branch as necessary, then merge develop into it and push everything.
+          git remote set-url origin $REMOTE
+          git fetch origin refs/heads/release/$MAJORMINOR:refs/remotes/origin/release/$MAJORMINOR || echo "WARNING: Unable to fetch release branch"
+          git checkout -b release/$MAJORMINOR origin/release/$MAJORMINOR
+          git merge "${NEWTAG}" -m "Merging in ${NEWTAG} from develop."
+          git remote set-url origin $REMOTE
+          git push origin develop && git push origin --tags && git push origin release/$MAJORMINOR
