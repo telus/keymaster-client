@@ -52,7 +52,7 @@ jobs:
           AWS_SECRET_ACCESS_KEY: ${{ secrets.CREDSTASH_SECRET_KEY }}
           AWS_DEFAULT_REGION: ca-central-1        
 
-      # if tests are successful, bump version and push to releases
+      # if tests are successful, bump version and push
       - name: Bump Version
         run: |
           # get things set up
@@ -63,18 +63,9 @@ jobs:
           # bump the patch version, commit, and tag.
           bump2version patch --message "[gitbot] autobump: {current_version} → {new_version}"
           
-          # get the new tag and extract major.minor version for the release branch name.
-          export NEWTAG="$(git tag --sort -v:refname | head -n 1)"
-          export MAJORMINOR="v$(cat VERSION | cut -f1,2 -d.)"
-          echo "Major/Minor Version: ${MAJORMINOR}"
-          
           # create remote URL using github's provided info
           export REMOTE=https://inhumantsar:${GITHUB_PAT}@github.com/${GITHUB_REPOSITORY}.git
           
-          # checkout or create the release branch as necessary, then merge develop into it and push everything.
+          # set remote and push everything
           git remote set-url origin $REMOTE
-          git fetch origin refs/heads/release/$MAJORMINOR:refs/remotes/origin/release/$MAJORMINOR || echo "WARNING: Unable to fetch release branch"
-          git checkout -b release/$MAJORMINOR origin/release/$MAJORMINOR
-          git merge "${NEWTAG}" -m "Merging in ${NEWTAG} from develop."
-          git remote set-url origin $REMOTE
-          git push origin develop && git push origin --tags && git push origin release/$MAJORMINOR
+          git push origin master && git push --tags
