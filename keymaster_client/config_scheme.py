@@ -126,6 +126,13 @@ class UCIConfigScheme(ConfigScheme):
         result = run(['uci', 'get', f'network.{interface_name}'], capture_output=True, check=False)
         return result.returncode == 0
 
+    @staticmethod
+    def _uci_get(key, check=False):
+        result = run(['uci', 'get', key], capture_output=True, check=check)
+        if result.returncode == 0:
+            return result.stdout.decode().strip()
+        return None
+
     def read(self, interface_name: str) -> wg.WireguardInterface:
         """Takes the name of a wireguard interface, pulls the necessary info from UCI,
         and returns a WireguardInterface from that info."""
@@ -134,32 +141,22 @@ class UCIConfigScheme(ConfigScheme):
             raise RuntimeError(f'interface {interface_name} is not present')
 
         # build dict from uci outputs
-        output_dict = {}
-
-        output_dict['name'] = interface_name
-
-        result = run(['uci', 'get', f'network.{interface_name}.addresses'], capture_output=True,
-                     check=True)
-        output_dict['addresses'] = result.stdout.decode().strip().split(' ')
-
-        result = run(['uci', 'get', f'network.{interface_name}.private_key'], capture_output=True,
-                     check=True)
-        output_dict['private_key'] = result.stdout.decode().strip()
-
-        result = run(['uci', 'get', f'network.{interface_name}.listen_port'], capture_output=True,
-                     check=False)
-        if result.returncode == 0:
-            output_dict['listen_port'] = int(result.stdout.decode().strip())
-
-        result = run(['uci', 'get', f'network.{interface_name}.fwmark'], capture_output=True,
-                     check=False)
-        if result.returncode == 0:
-            output_dict['fw_mark'] = int(result.stdout.decode().strip())
-
+        base_node = f'network.{interface_name}'
         peer_names = self._get_uci_peer_names(interface_name)
+        output_dict = {
+            'name': interface_name,
+            'addresses': self._uci_get(f'{base_node}.addresses', check=True).split(' '),
+            'private_key': self._uci_get(f'{base_node}.private_key', check=True),
+            'peers': [self._read_peer(peer) for peer in peer_names]
+        }
+        listen_port_raw = self._uci_get(f'{base_node}.listen_port', check=False)
+        if listen_port_raw:
+            output_dict['listen_port'] = int(listen_port_raw)
+        fw_mark_raw = self._uci_get(f'{base_node}.fwmark', check=False)
+        if fw_mark_raw:
+            output_dict['fw_mark'] = int(fw_mark_raw)
 
-        output_dict['peers'] = [self._read_peer(peer) for peer in peer_names]
-
+        # return WireguardInterface object
         return wg.WireguardInterface(**output_dict)
 
     def _read_peer(self, node_name: str) -> wg.WireguardPeer:
@@ -170,34 +167,25 @@ class UCIConfigScheme(ConfigScheme):
             raise RuntimeError(f'node {node_name} is not present')
 
         # build dict from uci outputs
-        output_dict = {}
-        result = run(['uci', 'get', f'network.{node_name}.public_key'], capture_output=True,
-                     check=True)
-        output_dict['public_key'] = result.stdout.decode().strip()
+        base_node = f'network.{node_name}'
+        output_dict = {
+            'public_key': self._uci_get(f'{base_node}.public_key', check=True),
+        }
+        allowed_ips_raw = self._uci_get(f'{base_node}.allowed_ips', check=True)
+        output_dict['allowed_ips'] = allowed_ips_raw.replace('\n', '').split(' ')
 
-        result = run(['uci', 'get', f'network.{node_name}.allowed_ips'], capture_output=True,
-                     check=True)
-        output_dict['allowed_ips'] = result.stdout.decode().replace('\n', '').split(' ')
+        endpoint_host_raw = self._uci_get(f'{base_node}.endpoint_host', check=False)
+        endpoint_port_raw = self._uci_get(f'{base_node}.endpoint_port', check=False)
+        if endpoint_host_raw and endpoint_port_raw:
+            output_dict['endpoint'] = f'{endpoint_host_raw}:{endpoint_port_raw}'
 
-        result = run(['uci', 'get', f'network.{node_name}.endpoint_host'], capture_output=True,
-                     check=False)
-        if result.returncode == 0:
-            endpoint_host = result.stdout.decode().strip()
-        result = run(['uci', 'get', f'network.{node_name}.endpoint_port'], capture_output=True,
-                     check=False)
-        if result.returncode == 0:
-            endpoint_port = result.stdout.decode().strip()
-        output_dict['endpoint'] = f'{endpoint_host}:{endpoint_port}'
+        pk_raw = self._uci_get(f'{base_node}.persistent_keepalive', check=False)
+        if pk_raw:
+            output_dict['persistent_keepalive'] = int(pk_raw)
 
-        result = run(['uci', 'get', f'network.{node_name}.persistent_keepalive'],
-                     capture_output=True, check=False)
-        if result.returncode == 0:
-            output_dict['persistent_keepalive'] = int(result.stdout.decode().strip())
-
-        result = run(['uci', 'get', f'network.{node_name}.preshared_key'], capture_output=True,
-                     check=False)
-        if result.returncode == 0:
-            output_dict['preshared_key'] = result.stdout.decode().strip()
+        preshared_key = self._uci_get(f'{base_node}.preshared_key', check=False)
+        if preshared_key:
+            output_dict['preshared_key'] = preshared_key
 
         return wg.WireguardPeer(**output_dict)
 

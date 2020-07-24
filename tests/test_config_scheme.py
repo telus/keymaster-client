@@ -6,9 +6,9 @@ from subprocess import CompletedProcess
 from keymaster_client.config_scheme import UCIConfigScheme
 
 
-def test_uci_config_scheme_read_peer(mocker):
-    interface = 'asdf'
-    def mock_run(*args, **kwargs):
+def make_mock_run_peer(interface_name, endpoint_host=None, endpoint_port=None,
+                       persistent_keepalive=None, preshared_key=None):
+    def mock_run_peer(*args, **kwargs):
         if args[0] == ['which', 'uci']:
             return CompletedProcess(
                 args=['which', 'uci'],
@@ -21,55 +21,74 @@ def test_uci_config_scheme_read_peer(mocker):
                 returncode=0,
                 stdout=b'/usr/bin/wg\n'
             )
-        elif args[0] == ['uci', 'get', f'network.{interface}']:
+        elif args[0] == ['uci', 'get', f'network.{interface_name}']:
             return CompletedProcess(
                 args=args[0],
                 returncode=0
             )
-        elif args[0] == ['uci', 'get', f'network.{interface}.public_key']:
+        elif args[0] == ['uci', 'get', f'network.{interface_name}.public_key']:
             return CompletedProcess(
                 args=args[0],
                 returncode=0,
                 stdout='publickey'.encode()
             )
-        elif args[0] == ['uci', 'get', f'network.{interface}.allowed_ips']:
+        elif args[0] == ['uci', 'get', f'network.{interface_name}.allowed_ips']:
             return CompletedProcess(
                 args=args[0],
                 returncode=0,
                 stdout='192.168.1.0/24 192.168.2.0/24'.encode()
             )
-        elif args[0] == ['uci', 'get', f'network.{interface}.endpoint_host']:
-            return CompletedProcess(
-                args=args[0],
-                returncode=0,
-                stdout='192.168.1.2'.encode()
-            )
-        elif args[0] == ['uci', 'get', f'network.{interface}.endpoint_port']:
-            return CompletedProcess(
-                args=args[0],
-                returncode=0,
-                stdout='4444'.encode()
-            )
-        elif args[0] == ['uci', 'get', f'network.{interface}.persistent_keepalive']:
-            return CompletedProcess(
-                args=args[0],
-                returncode=0,
-                stdout='25'.encode()
-            )
-        elif args[0] == ['uci', 'get', f'network.{interface}.preshared_key']:
-            return CompletedProcess(
-                args=args[0],
-                returncode=0,
-                stdout='presharedkey'.encode()
-            )
-    mocker.patch('keymaster_client.config_scheme.run', mock_run)
+        elif args[0] == ['uci', 'get', f'network.{interface_name}.endpoint_host']:
+            if endpoint_host:
+                return CompletedProcess(args=args[0], returncode=0, stdout=f'{endpoint_host}'.encode())
+            else:
+                return CompletedProcess(args=args[0], returncode=1, stdout=f''.encode())
+        elif args[0] == ['uci', 'get', f'network.{interface_name}.endpoint_port']:
+            if endpoint_port:
+                return CompletedProcess(args=args[0], returncode=0, stdout=f'{endpoint_port}'.encode())
+            else:
+                return CompletedProcess(args=args[0], returncode=1, stdout=f''.encode())
+        elif args[0] == ['uci', 'get', f'network.{interface_name}.persistent_keepalive']:
+            if persistent_keepalive:
+                return CompletedProcess(args=args[0], returncode=0, stdout=f'{persistent_keepalive}'.encode())
+            else:
+                return CompletedProcess(args=args[0], returncode=1, stdout=f''.encode())
+        elif args[0] == ['uci', 'get', f'network.{interface_name}.preshared_key']:
+            if preshared_key:
+                return CompletedProcess(args=args[0], returncode=0, stdout=f'{preshared_key}'.encode())
+            else:
+                return CompletedProcess(args=args[0], returncode=1, stdout=f''.encode())
+    return mock_run_peer
+
+
+def test_uci_config_scheme_read_peer(mocker):
+    interface_name = 'asdf'
+    endpoint_host = '192.168.1.2'
+    endpoint_port = 4444
+    persistent_keepalive = 25
+    preshared_key = 'presharedkey'
+    mock_run_peer = make_mock_run_peer(interface_name, endpoint_host=endpoint_host,
+                                       endpoint_port=endpoint_port,
+                                       persistent_keepalive=persistent_keepalive,
+                                       preshared_key=preshared_key)
+    mocker.patch('keymaster_client.config_scheme.run', mock_run_peer)
     cs = UCIConfigScheme()
-    p = cs._read_peer(interface)
+    p = cs._read_peer(interface_name)
     assert p.public_key == 'publickey'
     assert p.allowed_ips == ['192.168.1.0/24', '192.168.2.0/24']
-    assert p.endpoint == '192.168.1.2:4444'
-    assert p.persistent_keepalive == 25
-    assert p.preshared_key == 'presharedkey'
+    assert p.endpoint == f'{endpoint_host}:{endpoint_port}'
+    assert p.persistent_keepalive == persistent_keepalive
+    assert p.preshared_key == preshared_key
+
+
+def test_uci_config_scheme_read_peer_required_only(mocker):
+    interface_name = 'asdf'
+    mock_run_peer = make_mock_run_peer(interface_name)
+    mocker.patch('keymaster_client.config_scheme.run', mock_run_peer)
+    cs = UCIConfigScheme()
+    p = cs._read_peer(interface_name)
+    assert p.public_key == 'publickey'
+    assert p.allowed_ips == ['192.168.1.0/24', '192.168.2.0/24']
 
 
 def test_get_uci_peer_names(mocker):
@@ -124,9 +143,7 @@ def test_get_uci_peer_names(mocker):
     assert len(peer_names) == 1
 
 
-def test_from_uci(mocker):
-    interface_name = 'asdf'
-
+def make_mock_run(interface_name, listen_port=None, fwmark=None):
     def mock_run(*args, **kwargs):
         if args[0] == ['uci', 'get', f'network.{interface_name}']:
             return CompletedProcess(
@@ -146,18 +163,23 @@ def test_from_uci(mocker):
                 stdout='privatekey'.encode()
             )
         elif args[0] == ['uci', 'get', f'network.{interface_name}.listen_port']:
-            return CompletedProcess(
-                args=args[0],
-                returncode=0,
-                stdout='4444'.encode()
-            )
+            if listen_port:
+                return CompletedProcess(args=args[0], returncode=0, stdout=f'{listen_port}'.encode())
+            else:
+                return CompletedProcess(args=args[0], returncode=1, stdout=''.encode())
         elif args[0] == ['uci', 'get', f'network.{interface_name}.fwmark']:
-            return CompletedProcess(
-                args=args[0],
-                returncode=0,
-                stdout='32'.encode()
-            )
+            if fwmark:
+                return CompletedProcess(args=args[0], returncode=0, stdout=f'{fwmark}'.encode())
+            else:
+                return CompletedProcess(args=args[0], returncode=1, stdout=''.encode())
+    return mock_run
 
+
+def test_from_uci(mocker):
+    interface_name = 'asdf'
+    listen_port = 4444
+    fwmark = 32
+    mock_run = make_mock_run(interface_name, listen_port=listen_port, fwmark=fwmark)
     mocker.patch('keymaster_client.config_scheme.run', mock_run)
     mocker.patch('keymaster_client.config_scheme.UCIConfigScheme._get_uci_peer_names', return_value=[])
     cs = UCIConfigScheme()
@@ -165,5 +187,17 @@ def test_from_uci(mocker):
     assert interface.name == interface_name
     assert interface.addresses == ['192.168.1.2/24', '192.168.2.2/24']
     assert interface.private_key == 'privatekey'
-    assert interface.listen_port == 4444
-    assert interface.fw_mark == 32
+    assert interface.listen_port == listen_port
+    assert interface.fw_mark == fwmark
+
+
+def test_from_uci_required_only(mocker):
+    interface_name = 'asdf'
+    mock_run = make_mock_run(interface_name)
+    mocker.patch('keymaster_client.config_scheme.run', mock_run)
+    mocker.patch('keymaster_client.config_scheme.UCIConfigScheme._get_uci_peer_names', return_value=[])
+    cs = UCIConfigScheme()
+    interface = cs.read(interface_name)
+    assert interface.name == interface_name
+    assert interface.addresses == ['192.168.1.2/24', '192.168.2.2/24']
+    assert interface.private_key == 'privatekey'
