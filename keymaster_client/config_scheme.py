@@ -110,8 +110,8 @@ class wgConfigScheme(ConfigScheme): # pylint: disable=invalid-name
         return addresses
 
 
-class uciConfigScheme(ConfigScheme): # pylint: disable=invalid-name
-    """`uciConfigScheme` uses the OpenWrt project's `uci` (universal configuration
+class UCIConfigScheme(ConfigScheme):
+    """`UCIConfigScheme` uses the OpenWrt project's `uci` (universal configuration
     interface) tool to configure wireguard interfaces. For more information see
     the OpenWrt documentation on wireguard configuration."""
 

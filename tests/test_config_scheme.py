@@ -3,7 +3,7 @@
 
 from subprocess import CompletedProcess
 
-from keymaster_client.config_scheme import uciConfigScheme
+from keymaster_client.config_scheme import UCIConfigScheme
 
 
 def test_uci_config_scheme_read_peer(mocker):
@@ -63,7 +63,7 @@ def test_uci_config_scheme_read_peer(mocker):
                 stdout='presharedkey'.encode()
             )
     mocker.patch('keymaster_client.config_scheme.run', mock_run)
-    cs = uciConfigScheme()
+    cs = UCIConfigScheme()
     p = cs._read_peer(interface)
     assert p.public_key == 'publickey'
     assert p.allowed_ips == ['192.168.1.0/24', '192.168.2.0/24']
@@ -118,7 +118,7 @@ def test_get_uci_peer_names(mocker):
             )
 
     mocker.patch('keymaster_client.config_scheme.run', mock_run)
-    cs = uciConfigScheme()
+    cs = UCIConfigScheme()
     peer_names = cs._get_uci_peer_names(interface)
     assert peer_names[0] == f'{interface}_peer0'
     assert len(peer_names) == 1
@@ -159,8 +159,8 @@ def test_from_uci(mocker):
             )
 
     mocker.patch('keymaster_client.config_scheme.run', mock_run)
-    mocker.patch('keymaster_client.config_scheme.uciConfigScheme._get_uci_peer_names', return_value=[])
-    cs = uciConfigScheme()
+    mocker.patch('keymaster_client.config_scheme.UCIConfigScheme._get_uci_peer_names', return_value=[])
+    cs = UCIConfigScheme()
     interface = cs.read(interface_name)
     assert interface.name == interface_name
     assert interface.addresses == ['192.168.1.2/24', '192.168.2.2/24']
