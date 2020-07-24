@@ -127,11 +127,15 @@ class UCIConfigScheme(ConfigScheme):
         return result.returncode == 0
 
     @staticmethod
-    def _uci_get(key, check=False):
-        result = run(['uci', 'get', key], capture_output=True, check=check)
-        if result.returncode == 0:
-            return result.stdout.decode().strip()
-        return None
+    def _uci_get(key, required=False):
+        result = run(['uci', 'get', key], capture_output=True, check=required)
+        if result.returncode != 0:
+            return None
+        if 'addresses' in key:
+            return result.stdout.decode().strip().split(' ')
+        if 'allowed_ips' in key:
+            return result.stdout.decode().strip().replace('\n', '').split(' ')
+        return result.stdout.decode().strip()
 
     def read(self, interface_name: str) -> wg.WireguardInterface:
         """Takes the name of a wireguard interface, pulls the necessary info from UCI,
@@ -145,15 +149,13 @@ class UCIConfigScheme(ConfigScheme):
         peer_names = self._get_uci_peer_names(interface_name)
         output_dict = {
             'name': interface_name,
-            'addresses': self._uci_get(f'{base_node}.addresses', check=True).split(' '),
-            'private_key': self._uci_get(f'{base_node}.private_key', check=True),
-            'peers': [self._read_peer(peer) for peer in peer_names]
+            'peers': [self._read_peer(peer) for peer in peer_names],
+            'addresses': self._uci_get(f'{base_node}.addresses', required=True),
+            'private_key': self._uci_get(f'{base_node}.private_key', required=True)
         }
-        listen_port_raw = self._uci_get(f'{base_node}.listen_port', check=False)
-        if listen_port_raw:
+        if listen_port_raw := self._uci_get(f'{base_node}.listen_port', required=False):
             output_dict['listen_port'] = int(listen_port_raw)
-        fw_mark_raw = self._uci_get(f'{base_node}.fwmark', check=False)
-        if fw_mark_raw:
+        if fw_mark_raw := self._uci_get(f'{base_node}.fwmark', required=False):
             output_dict['fw_mark'] = int(fw_mark_raw)
 
         # return WireguardInterface object
@@ -169,22 +171,16 @@ class UCIConfigScheme(ConfigScheme):
         # build dict from uci outputs
         base_node = f'network.{node_name}'
         output_dict = {
-            'public_key': self._uci_get(f'{base_node}.public_key', check=True),
+            'public_key': self._uci_get(f'{base_node}.public_key', required=True),
+            'allowed_ips': self._uci_get(f'{base_node}.allowed_ips', required=True)
         }
-        allowed_ips_raw = self._uci_get(f'{base_node}.allowed_ips', check=True)
-        output_dict['allowed_ips'] = allowed_ips_raw.replace('\n', '').split(' ')
-
-        endpoint_host_raw = self._uci_get(f'{base_node}.endpoint_host', check=False)
-        endpoint_port_raw = self._uci_get(f'{base_node}.endpoint_port', check=False)
+        endpoint_host_raw = self._uci_get(f'{base_node}.endpoint_host', required=False)
+        endpoint_port_raw = self._uci_get(f'{base_node}.endpoint_port', required=False)
         if endpoint_host_raw and endpoint_port_raw:
             output_dict['endpoint'] = f'{endpoint_host_raw}:{endpoint_port_raw}'
-
-        pk_raw = self._uci_get(f'{base_node}.persistent_keepalive', check=False)
-        if pk_raw:
+        if pk_raw := self._uci_get(f'{base_node}.persistent_keepalive', required=False):
             output_dict['persistent_keepalive'] = int(pk_raw)
-
-        preshared_key = self._uci_get(f'{base_node}.preshared_key', check=False)
-        if preshared_key:
+        if preshared_key := self._uci_get(f'{base_node}.preshared_key', required=False):
             output_dict['preshared_key'] = preshared_key
 
         return wg.WireguardPeer(**output_dict)
