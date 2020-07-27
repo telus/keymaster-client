@@ -9,15 +9,6 @@ from dataclasses import dataclass, field
 from ipaddress import ip_interface, ip_network
 
 
-UCI_PRESENT = run(['which', 'uci'], capture_output=True, check=False).returncode == 0
-
-
-def uci_interface_present(interface: str, check: bool = False):
-    """Checks whether `interface` is present as a node in the UCI network config."""
-    result = run(['uci', 'get', f'network.{interface}'], capture_output=True, check=check)
-    return result.returncode == 0
-
-
 def generate_private_key():
     """Uses the local installation of `wg` to generate a private key."""
     result = run(['wg', 'genkey'], capture_output=True, check=True)
@@ -30,23 +21,6 @@ def get_public_key(private_key: str):
     result = run(['wg', 'pubkey'], capture_output=True, check=True,
                  input=private_key)
     return result.stdout.decode().strip()
-
-
-def _get_uci_peer_names(interface: str) -> List[str]:
-    """Under UCI, peers are like interfaces but rather than being of the form
-    `network.{interface_name}=interface`, they are of the form
-    `network.{peer_name}=wireguard_{interface_name}. This function gets all
-    `peer_name`s for a specific `interface_name`."""
-    result = run(['uci', 'show', 'network'], capture_output=True, check=True)
-    lines = result.stdout.decode().strip().split('\n')
-    peer_names = []
-    for line in lines:
-        sep_index = line.index('=')
-        key = line[:sep_index]
-        value = line[sep_index+1:]
-        if value == f'wireguard_{interface}':
-            peer_names.append(key.split('.')[1])
-    return peer_names
 
 
 def _separate_peers(lines: List[str]) -> Iterable[List[str]]:
@@ -149,48 +123,6 @@ class WireguardPeer:
 
         return cls(**output_dict)
 
-    @classmethod
-    def from_uci(cls, node_name: str) -> WireguardPeer:
-        """Takes the name of a wireguard peer node, pulls all related info from UCI,
-        and builds a WireguardPeer from that info."""
-        if not UCI_PRESENT:
-            raise RuntimeError('The system does not have uci')
-
-        # check if network interface exists in UCI
-        uci_interface_present(node_name, check=True)
-
-        # build dict from uci outputs
-        output_dict = {}
-        result = run(['uci', 'get', f'network.{node_name}.public_key'], capture_output=True,
-                     check=True)
-        output_dict['public_key'] = result.stdout.decode().strip()
-
-        result = run(['uci', 'get', f'network.{node_name}.allowed_ips'], capture_output=True,
-                     check=True)
-        output_dict['allowed_ips'] = result.stdout.decode().replace('\n', '').split(' ')
-
-        result = run(['uci', 'get', f'network.{node_name}.endpoint_host'], capture_output=True,
-                     check=False)
-        if result.returncode == 0:
-            endpoint_host = result.stdout.decode().strip()
-        result = run(['uci', 'get', f'network.{node_name}.endpoint_port'], capture_output=True,
-                     check=False)
-        if result.returncode == 0:
-            endpoint_port = result.stdout.decode().strip()
-        output_dict['endpoint'] = f'{endpoint_host}:{endpoint_port}'
-
-        result = run(['uci', 'get', f'network.{node_name}.persistent_keepalive'],
-                     capture_output=True, check=False)
-        if result.returncode == 0:
-            output_dict['persistent_keepalive'] = int(result.stdout.decode().strip())
-
-        result = run(['uci', 'get', f'network.{node_name}.preshared_key'], capture_output=True,
-                     check=False)
-        if result.returncode == 0:
-            output_dict['preshared_key'] = result.stdout.decode().strip()
-
-        return cls(**output_dict)
-
     def to_wireguard_config_lines(self) -> List[str]:
         """Turns the WireguardPeer object into a list of lines that make up the
         configuration for a single Peer. These lines are in wireguard configuration
@@ -208,40 +140,6 @@ class WireguardPeer:
             output_string_list.append(f'PresharedKey = {self.preshared_key}')
 
         return output_string_list
-
-    def write_to_uci(self, interface, peer_number):
-        """Writes the WireguardPeer to UCI. Peer record in UCI does not need to be
-        deleted here; WireguardInterface.write_to_uci takes care of that since it
-        is in a better position to do so."""
-        if not UCI_PRESENT:
-            raise RuntimeError('The system does not have uci')
-        node_name = f'{interface}_peer{peer_number}'
-
-        run(['uci', 'set', f'network.{node_name}=wireguard_{interface}'],
-            capture_output=True, check=True)
-
-        run(['uci', 'set', f'network.{node_name}.public_key={self.public_key}'],
-            capture_output=True, check=True)
-
-        for allowed_ip in self.allowed_ips:
-            run(['uci', 'add_list', f'network.{node_name}.allowed_ips={allowed_ip}'],
-                capture_output=True, check=True)
-
-        if self.endpoint is not None:
-            host, port = self.endpoint.split(':')
-            run(['uci', 'set', f'network.{node_name}.endpoint_host={host}'],
-                capture_output=True, check=True)
-            run(['uci', 'set', f'network.{node_name}.endpoint_port={port}'],
-                capture_output=True, check=True)
-
-        if self.preshared_key is not None:
-            run(['uci', 'set', f'network.{node_name}.preshared_key={self.preshared_key}'],
-                capture_output=True, check=True)
-
-        if self.persistent_keepalive is not None:
-            run(['uci', 'set',
-                 f'network.{node_name}.persistent_keepalive={self.persistent_keepalive}'],
-                capture_output=True, check=True)
 
 
 @dataclass
@@ -349,45 +247,6 @@ class WireguardInterface:
         return cls(**interface_dict)
 
     @classmethod
-    def from_uci(cls, interface: str) -> WireguardInterface:
-        """Takes the name of a wireguard interface, pulls the necessary info from UCI,
-        and returns a WireguardInterface from that info."""
-        if not UCI_PRESENT:
-            raise RuntimeError('The system does not have uci')
-
-        # check if network interface exists in UCI
-        uci_interface_present(interface, check=True)
-
-        # build dict from uci outputs
-        output_dict = {}
-
-        output_dict['name'] = interface
-
-        result = run(['uci', 'get', f'network.{interface}.addresses'], capture_output=True,
-                     check=True)
-        output_dict['addresses'] = result.stdout.decode().strip().split(' ')
-
-        result = run(['uci', 'get', f'network.{interface}.private_key'], capture_output=True,
-                     check=True)
-        output_dict['private_key'] = result.stdout.decode().strip()
-
-        result = run(['uci', 'get', f'network.{interface}.listen_port'], capture_output=True,
-                     check=False)
-        if result.returncode == 0:
-            output_dict['listen_port'] = int(result.stdout.decode().strip())
-
-        result = run(['uci', 'get', f'network.{interface}.fwmark'], capture_output=True,
-                     check=False)
-        if result.returncode == 0:
-            output_dict['fw_mark'] = int(result.stdout.decode().strip())
-
-        peer_names = _get_uci_peer_names(interface)
-
-        output_dict['peers'] = [WireguardPeer.from_uci(peer) for peer in peer_names]
-
-        return cls(**output_dict)
-
-    @classmethod
     def from_dict(cls, input_dict: dict) -> WireguardInterface:
         """Takes a dict that contains info we can build a WireguardInterface out of.
         We use this method instead of calling `WireguardInterface(**my_dict)`
@@ -419,45 +278,3 @@ class WireguardInterface:
         output_string_list.append('')
 
         outfile.write('\n'.join(output_string_list))
-
-    def write_to_uci(self):
-        """Writes this WireguardInterface to UCI and commits the changes."""
-        if not UCI_PRESENT:
-            raise RuntimeError('The system does not have uci')
-
-        # delete old interface
-        result = run(['uci', 'get', f'network.{self.name}'], capture_output=True, check=False)
-        if result.returncode == 0:
-            run(['uci', '-q', 'delete', f'network.{self.name}'],
-                capture_output=True, check=True)
-
-        # build new interface
-        run(['uci', 'set', f'network.{self.name}=interface'], capture_output=True, check=True)
-        run(['uci', 'set', f'network.{self.name}.proto=wireguard'],
-            capture_output=True, check=True)
-        run(['uci', 'set', f'network.{self.name}.private_key={self.private_key}'],
-            capture_output=True, check=True)
-
-        for address in self.addresses:
-            run(['uci', 'add_list', f'network.{self.name}.addresses={address}'],
-                capture_output=True, check=True)
-
-        if self.listen_port is not None:
-            run(['uci', 'add_list', f'network.{self.name}.listen_port={self.listen_port}'],
-                capture_output=True, check=True)
-
-        if self.fw_mark is not None:
-            run(['uci', 'add_list', f'network.{self.name}.fwmark={self.fw_mark}'],
-                capture_output=True, check=True)
-
-        # clear all peers
-        peer_names = _get_uci_peer_names(self.name)
-        for peer_name in peer_names:
-            run(['uci', '-q', 'delete', f'network.{peer_name}'], capture_output=True, check=True)
-
-        # write all peers
-        for i, peer in enumerate(self.peers):
-            peer.write_to_uci(self.name, i)
-
-        # commit changes
-        run(['uci', 'commit', 'network'], capture_output=True, check=True)
