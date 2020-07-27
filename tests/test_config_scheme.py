@@ -24,7 +24,8 @@ def make_mock_run_peer(interface_name, endpoint_host=None, endpoint_port=None,
         elif args[0] == ['uci', 'get', f'network.{interface_name}']:
             return CompletedProcess(
                 args=args[0],
-                returncode=0
+                returncode=0,
+                stdout='interface'.encode()
             )
         elif args[0] == ['uci', 'get', f'network.{interface_name}.public_key']:
             return CompletedProcess(
