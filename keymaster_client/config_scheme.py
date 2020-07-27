@@ -4,7 +4,7 @@ import subprocess
 import json
 import os
 
-from typing import List
+from typing import List, Union
 from subprocess import run
 
 import keymaster_client.wireguard as wg
@@ -127,13 +127,18 @@ class UCIConfigScheme(ConfigScheme):
         return result.returncode == 0
 
     @staticmethod
-    def _uci_get(key, required=False):
-        result = run(['uci', 'get', key], capture_output=True, check=required)
+    def _uci_get(node_name: str, required: bool = False) -> Union[str, List[str], None]:
+        """Reads the value of the uci node passed in `node_name`.
+        If `required=True`, a nonexistent node will raise `subprocess.CalledProcessError`.
+        If `required=False`, a nonexistent node will return None.
+        If the `allowed_ips` or `addresses` wireguard node are requested, parses these
+        values into a list before returning them."""
+        result = run(['uci', 'get', node_name], capture_output=True, check=required)
         if result.returncode != 0:
             return None
-        if 'addresses' in key:
+        if 'addresses' in node_name:
             return result.stdout.decode().strip().split(' ')
-        if 'allowed_ips' in key:
+        if 'allowed_ips' in node_name:
             return result.stdout.decode().strip().replace('\n', '').split(' ')
         return result.stdout.decode().strip()
 
@@ -185,6 +190,19 @@ class UCIConfigScheme(ConfigScheme):
 
         return wg.WireguardPeer(**output_dict)
 
+    @staticmethod
+    def _uci_set(node_name: str, value: Union[str, List[str]]):
+        """Sets the node given by `node_name` to the value passed in `value` by using `uci set`.
+        If `value` is of type `list`, then the `uci add_list` command is used for each element
+        of `value`."""
+        if isinstance(value, str):
+            run(['uci', 'set', f'{node_name}={value}'], capture_output=True, check=True)
+        elif isinstance(value, list):
+            for element in value:
+                run(['uci', 'add_list', f'{node_name}={element}'], capture_output=True, check=True)
+        else:
+            raise TypeError(f'value is of type {type(value)} but must be a list or str')
+
     def write(self, interface: wg.WireguardInterface):
         """Writes this WireguardInterface to UCI and commits the changes."""
         # delete old interface
@@ -194,24 +212,14 @@ class UCIConfigScheme(ConfigScheme):
                 capture_output=True, check=True)
 
         # build new interface
-        run(['uci', 'set', f'network.{interface.name}=interface'], capture_output=True, check=True)
-        run(['uci', 'set', f'network.{interface.name}.proto=wireguard'],
-            capture_output=True, check=True)
-        run(['uci', 'set', f'network.{interface.name}.private_key={interface.private_key}'],
-            capture_output=True, check=True)
-
-        for address in interface.addresses:
-            run(['uci', 'add_list', f'network.{interface.name}.addresses={address}'],
-                capture_output=True, check=True)
-
+        self._uci_set(f'network.{interface.name}', 'interface')
+        self._uci_set(f'network.{interface.name}.proto', 'wireguard')
+        self._uci_set(f'network.{interface.name}.private_key', interface.private_key)
+        self._uci_set(f'network.{interface.name}.addresses', interface.addresses)
         if interface.listen_port is not None:
-            run(['uci', 'add_list',
-                 f'network.{interface.name}.listen_port={interface.listen_port}'],
-                capture_output=True, check=True)
-
+            self._uci_set('network.{interface.name}.listen_port', interface.listen_port)
         if interface.fw_mark is not None:
-            run(['uci', 'add_list', f'network.{interface.name}.fwmark={interface.fw_mark}'],
-                capture_output=True, check=True)
+            self._uci_set('network.{interface.name}.fwmark', interface.fw_mark)
 
         # clear all peers
         peer_names = self._get_uci_peer_names(interface.name)
@@ -225,38 +233,22 @@ class UCIConfigScheme(ConfigScheme):
         # commit changes
         run(['uci', 'commit', 'network'], capture_output=True, check=True)
 
-    @staticmethod
-    def _write_peer(peer: wg.WireguardPeer, interface_name: str, peer_number: int):
+    def _write_peer(self, peer: wg.WireguardPeer, interface_name: str, peer_number: int):
         """Writes a WireguardPeer to UCI. Peer record in UCI does not need to be
         deleted here; `uciConfigScheme.write` takes care of that since it
         is in a better position to do so."""
         node_name = f'{interface_name}_peer{peer_number}'
-
-        run(['uci', 'set', f'network.{node_name}=wireguard_{interface_name}'],
-            capture_output=True, check=True)
-
-        run(['uci', 'set', f'network.{node_name}.public_key={peer.public_key}'],
-            capture_output=True, check=True)
-
-        for allowed_ip in peer.allowed_ips:
-            run(['uci', 'add_list', f'network.{node_name}.allowed_ips={allowed_ip}'],
-                capture_output=True, check=True)
-
+        self._uci_set(f'network.{node_name}', f'wireguard_{interface_name}')
+        self._uci_set(f'network.{node_name}.public_key', peer.public_key)
+        self._uci_set(f'network.{node_name}.allowed_ips', peer.allowed_ips)
         if peer.endpoint is not None:
             host, port = peer.endpoint.split(':')
-            run(['uci', 'set', f'network.{node_name}.endpoint_host={host}'],
-                capture_output=True, check=True)
-            run(['uci', 'set', f'network.{node_name}.endpoint_port={port}'],
-                capture_output=True, check=True)
-
+            self._uci_set(f'network.{node_name}.endpoint_host', host)
+            self._uci_set(f'network.{node_name}.endpoint_port', port)
         if peer.preshared_key is not None:
-            run(['uci', 'set', f'network.{node_name}.preshared_key={peer.preshared_key}'],
-                capture_output=True, check=True)
-
+            self._uci_set(f'network.{node_name}.preshared_key', peer.preshared_key)
         if peer.persistent_keepalive is not None:
-            run(['uci', 'set',
-                 f'network.{node_name}.persistent_keepalive={peer.persistent_keepalive}'],
-                capture_output=True, check=True)
+            self._uci_set(f'network.{node_name}.persistent_keepalive', peer.persistent_keepalive)
 
     @staticmethod
     def _get_uci_peer_names(interface_name: str) -> List[str]:
