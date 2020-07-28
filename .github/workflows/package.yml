@@ -21,7 +21,7 @@ jobs:
           sudo pip3 install -r requirements.txt -r requirements_dev.txt
 
       - name: Build sdist tarball
-        run: python3 setup.py bdist_wheel
+        run: python setup.py sdist
 
       # Get Artifactory secret
       # see https://github.community/t5/GitHub-Actions/Pushes-by-GitHub-Actions-using-GITHUB-TOKEN-should-be-able-to/td-p/40579
@@ -38,7 +38,7 @@ jobs:
 
       - name: Push sdist tarball to Artifactory
         run: |
-          FILEPATH=$(ls dist/keymaster_client-*-py2.py3-none-any.whl)
+          FILEPATH=$(ls dist/keymaster_client-*.tar.gz)
           FILENAME=$(basename $FILEPATH)
           curl -i -f -H "X-JFrog-Art-Api: ${AF_TOKEN}" \
             --upload-file $FILEPATH \
