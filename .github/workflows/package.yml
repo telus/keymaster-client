@@ -1,0 +1,45 @@
+name: Package & Upload to Artifactory
+
+on:
+  push:
+    branches: [master]
+    
+jobs:
+  package:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v2
+
+      - name: Set up Python 3.8
+        uses: actions/setup-python@v1.1.1
+        with:
+          python-version: 3.8
+
+      - name: Install requirements
+        run: |
+          sudo pip3 install setuptools credstash && \
+          sudo pip3 install -r requirements.txt -r requirements_dev.txt
+
+      - name: Build sdist tarball
+        run: python setup.py bdist_wheel
+
+      # Get Artifactory secret
+      # see https://github.community/t5/GitHub-Actions/Pushes-by-GitHub-Actions-using-GITHUB-TOKEN-should-be-able-to/td-p/40579
+      - name: Fetch secrets
+        id: secrets
+        run: |
+          # failures in the set-env command don't cause the workflow to fail.
+          # calling this and then running set-env should flag up errors
+          echo "::set-env name=AF_TOKEN::$(credstash get artifactory-writer-token)"
+        env:
+          AWS_ACCESS_KEY_ID: ${{ secrets.CREDSTASH_ACCESS_KEY }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.CREDSTASH_SECRET_KEY }}
+          AWS_DEFAULT_REGION: ca-central-1
+
+      - name: Push sdist tarball to Artifactory
+        run: |
+          FILEPATH=$(ls dist/keymaster_client-*-py2.py3-none-any.whl)
+          FILENAME=$(basename $FILEPATH)
+          curl -i -f -H "X-JFrog-Art-Api: ${AF_TOKEN}" \
+            --upload-file $FILEPATH \
+            https://af.cses.ca/artifactory/udpu-local/keymaster_client/$FILENAME
