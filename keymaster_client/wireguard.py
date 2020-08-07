@@ -19,7 +19,7 @@ def get_public_key(private_key: str):
     """Generates a public key from the passed-in private key using the local
     `wg` installation."""
     result = run(['wg', 'pubkey'], capture_output=True, check=True,
-                 input=private_key)
+                 input=bytes(private_key, 'utf8'))
     return result.stdout.decode().strip()
 
 
