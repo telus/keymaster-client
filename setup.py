@@ -16,8 +16,20 @@ with open('requirements_dev.txt') as devreqs_file:
     test_requirements.extend(install_requirements)
 
 setup(
+    name='keymaster_client',
+    version='0.0.8',
     author='Adam Pickering',
     author_email='adamkpickering@gmail.com',
+    description="Configures wireguard using information received from keymaster-server",
+    license="BSD-3-Clause",
+    long_description=readme,
+    long_description_content_type='text/markdown',
+    url='https://github.com/telus/keymaster-client',
+    entry_points={
+        'console_scripts': [
+            'keymaster_client=keymaster_client.cli:main',
+        ],
+    },
     classifiers=[
         'Development Status :: 2 - Pre-Alpha',
         'Intended Audience :: Developers',
@@ -26,23 +38,10 @@ setup(
         'Programming Language :: Python :: 3',
         'Programming Language :: Python :: 3.8',
     ],
-    description="Configures wireguard using information received from keymaster-server",
-    entry_points={
-        'console_scripts': [
-            'keymaster_client=keymaster_client.cli:main',
-        ],
-    },
+    keywords='keymaster_client keymaster client wireguard wire guard',
+    python_requires='>=3.8',
     install_requires=install_requirements,
-    license="Proprietary",
-    long_description=readme,
-    include_package_data=True,
-    keywords='keymaster_client',
-    name='keymaster_client',
     packages=find_packages(include=['keymaster_client']),
-    package_data={},
     test_suite='test',
-    tests_require=test_requirements,
-    url='https://github.com/telus/keymaster-client',
-    version='0.0.8',
-    zip_safe=False,
+    tests_require=test_requirements
 )
