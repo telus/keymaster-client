@@ -17,7 +17,7 @@ with open('requirements_dev.txt') as devreqs_file:
 
 setup(
     name='keymaster_client',
-    version='0.0.8',
+    version='0.0.9',
     author='Adam Pickering',
     author_email='adamkpickering@gmail.com',
     description="Configures wireguard using information received from keymaster-server",
