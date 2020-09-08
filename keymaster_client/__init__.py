@@ -4,7 +4,7 @@
 
 __author__ = 'Adam Pickering'
 __email__ = 'adamkpickering@gmail.com'
-__version__ = '0.0.7'
+__version__ = '0.0.8'
 
 from keymaster_client.config_scheme import wgConfigScheme, UCIConfigScheme
 from keymaster_client.wireguard import (
