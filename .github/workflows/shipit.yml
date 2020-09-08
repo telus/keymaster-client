@@ -29,8 +29,8 @@ jobs:
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
-          pip install setuptools
-          pip install -r requirements.txt -r requirements_dev.txt
+          sudo pip install setuptools credstash bump2version
+          sudo pip install -r requirements.txt -r requirements_dev.txt
           
       - name: Lint
         run: pylint --exit-zero keymaster_client
@@ -40,8 +40,6 @@ jobs:
 
       # Get secrets for AF and the GitHub PAT for pushes
       # see https://github.community/t5/GitHub-Actions/Pushes-by-GitHub-Actions-using-GITHUB-TOKEN-should-be-able-to/td-p/40579
-      - name: Install credstash
-        run: sudo pip3 install credstash
       - name: Fetch secrets
         run: |
           # failures in the set-env command don't cause the workflow to fail.
@@ -57,7 +55,6 @@ jobs:
       - name: Bump Version
         run: |
           # get things set up
-          sudo pip3 install bump2version
           git config --global user.email "shaun@samsite.ca"
           git config --global user.name "Shaun Martin"
           
