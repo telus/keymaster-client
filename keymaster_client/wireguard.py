@@ -156,14 +156,15 @@ class WireguardInterface:
     For the other fields, please refer to the wireguard documentation."""
     name: str
     addresses: List[str]
-    private_key: str
+    private_key: str = None
     listen_port: int = None
     fw_mark: int = None
     peers: List[WireguardPeer] = field(default_factory=list)
+    validated: bool = False
+    auxiliary_data: dict = field(default_factory=dict)
 
-    def __post_init__(self):
-        """Runs after __init__, which is created using the `dataclass` decorator.
-        Here, its sole purpose is data validation."""
+    def validate(self):
+        """Validates the `WireguardInterface`. Should be called before using the instance."""
         if not isinstance(self.name, str):
             raise TypeError('interface name must be a string')
 
@@ -175,6 +176,8 @@ class WireguardInterface:
             ip_interface(ip_str)
             _, _ = ip_str.split('/')
 
+        if not self.private_key:
+            raise ValueError('private_key must be present')
         if not isinstance(self.private_key, str):
             raise TypeError(f'private_key must be a string but is of type {type(self.private_key)}')
 
@@ -190,6 +193,8 @@ class WireguardInterface:
 
         if not isinstance(self.peers, list):
             raise TypeError('peers must be a list')
+
+        self.validated = True
 
     @classmethod
     def from_wireguard_config_file(cls, name: str, addresses: List[str],
