@@ -47,9 +47,8 @@ def _separate_peers(lines: List[str]) -> Iterable[List[str]]:
 @dataclass
 class WireguardPeer:
     """Represents a single Peer in a wireguard configuration. Can
-    be instantiated directly, from a uci config using `from_uci`,
-    or from a list of strings that correspond to a single peer in
-    wireguard configuration file format.
+    be instantiated directly, or from a list of strings that correspond
+    to a single peer in wireguard configuration file format.
 
     For an understanding of what each field of this object does,
     please refer to the wireguard documentation."""
@@ -147,9 +146,8 @@ class WireguardInterface:
     """Represents a wireguard Interface, along with any Peers that it may
     be able to route traffic to. Should not be instantiated directly unless
     you have a list of `WireguardPeer`s ready to pass to it. Can be instantiated
-    from a dict with `from_dict`, from a uci config using `from_uci`,
-    or from a file-like object that contains wireguard configuration in the wireguard
-    configuration file format.
+    from a dict with `from_dict`, or from a file-like object that contains
+    wireguard configuration in the wireguard configuration file format.
 
     `name`: the name of the wireguard interface
 

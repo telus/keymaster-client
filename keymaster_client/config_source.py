@@ -1,8 +1,9 @@
 """Defines the ConfigSource abstract base class, and classes that implement it."""
 import abc
+import logging
 
 from urllib.parse import urlparse
-from typing import List
+from typing import List, Dict
 
 import requests
 
@@ -17,10 +18,17 @@ class ConfigSource(abc.ABC):
     up with."""
 
     @abc.abstractmethod
-    def get_config(self) -> List[wg.WireguardInterface]:
+    def get_config(self, private_key_mapping: Dict[str, str]) -> List[wg.WireguardInterface]:
+        """Gets the config from the ConfigSource, parses it into `WireguardInterface`s,
+        and returns it as a list of `WireguardInterface`s. `private_key_mapping` is a dict
+        with interface names as keys and the private keys for those interfaces as values.
+        If an interface is received from the ConfigSource and there is no private key for
+        it in `private_key_mapping`, one will be created."""
 
     @abc.abstractmethod
     def patch_public_key(self, interface_name: str, public_key: str):
+        """Writes a public key to the ConfigSource so that nodes that treat
+        this one as a Peer can include it in their [Peer] config."""
 
 
 class uDPUAPI(ConfigSource):
@@ -52,7 +60,7 @@ class uDPUAPI(ConfigSource):
         }
         ```
         and puts it into a format that can be consumed by WireguardInterface.from_dict.
-        For more details please see the keymaster-server."""
+        For more details please see the udpu-api documentation."""
         # peers
         peers = []
         for peer in config['peers']:
@@ -75,7 +83,7 @@ class uDPUAPI(ConfigSource):
 
         return output_config
 
-    def get_config(self) -> List[wg.WireguardInterface]:
+    def get_config(self, private_key_mapping: Dict[str, str]) -> List[wg.WireguardInterface]:
         """Fetches the config from the uDPU API and returns it as a single
         WireguardInterface in a list."""
         url = f'{self.url}/v1/wireguard/config/server/{self.network_name}'
@@ -109,3 +117,7 @@ class uDPUAPI(ConfigSource):
         }
         response = requests.patch(url, json=payload)
         response.raise_for_status()
+
+
+class KeymasterAPI(ConfigSource):
+    pass

@@ -3,6 +3,7 @@ import abc
 import subprocess
 import json
 import os
+import re
 
 from typing import List, Union
 from subprocess import run
@@ -21,6 +22,10 @@ class ConfigScheme(abc.ABC):
         """Tests whether the interface with name `interface_name` exists."""
 
     @abc.abstractmethod
+    def interface_names(self) -> List[str]:
+        """Returns the names of all currently-configured interfaces."""
+
+    @abc.abstractmethod
     def read(self, interface_name: str) -> wg.WireguardInterface:
         """Reads the interface by the name of `interface_name` from the system,
         and returns it as a WireguardInterface."""
@@ -28,6 +33,10 @@ class ConfigScheme(abc.ABC):
     @abc.abstractmethod
     def write(self, interface: wg.WireguardInterface):
         """Writes a WireguardInterface to the system."""
+
+    @abc.abstractmethod
+    def delete(self, interface_name: str):
+        """Deletes the interface by the name of `interface_name` from the system."""
 
 
 class wgConfigScheme(ConfigScheme): # pylint: disable=invalid-name
@@ -95,6 +104,12 @@ class wgConfigScheme(ConfigScheme): # pylint: disable=invalid-name
         # load config into wireguard with `wg`
         subprocess.run(['wg', 'setconf', interface.name, config_path],
                        capture_output=True, check=True)
+
+    def interface_names(self) -> List[str]:
+        _, _, filename = next(os.walk(self.config_dir))
+        pattern = re.compile(r'([a-zA-Z0-9]+)\.conf')
+        names = [pattern.findall(name)[0] for name in filename if pattern.findall(name)]
+        return names
 
     @staticmethod
     def _get_address_list(interface_name: str) -> List[str]:
@@ -267,3 +282,10 @@ class UCIConfigScheme(ConfigScheme):
             if value == f'wireguard_{interface_name}':
                 peer_names.append(key.split('.')[1])
         return peer_names
+
+    def interface_names(self) -> List[str]:
+       result = subprocess.run(['uci', 'show', 'network'], capture_output=True, check=True)
+       network_config = result.stdout.decode()
+       pattern = re.compile(r"network\.([a-zA-Z0-9]+)\.proto='wireguard'")
+       interface_names = pattern.findall(network_config)
+       return interface_names

@@ -1,6 +1,6 @@
 import pytest
 
-from keymaster_client.keymaster_api import KeymasterAPI
+from keymaster_client.config_source import KeymasterAPI
 
 
 def test_keymaster_api_validation(mocker):
