@@ -26,9 +26,10 @@ class ConfigSource(abc.ABC):
         it in `private_key_mapping`, one will be created."""
 
     @abc.abstractmethod
-    def patch_public_key(self, interface_name: str, public_key: str):
-        """Writes a public key to the ConfigSource so that nodes that treat
-        this one as a Peer can include it in their [Peer] config."""
+    def patch_public_key(self, interface: wg.WireguardInterface):
+        """Writes a the public key that corresponds to the private key of a WireguardInterface
+        to the ConfigSource so that nodes that treat this interface as a Peer can include
+        it in their [Peer] config."""
 
 
 class uDPUAPI(ConfigSource):
@@ -78,7 +79,11 @@ class uDPUAPI(ConfigSource):
             'name': config['interface']['name'],
             'addresses': config['interface']['addresses'],
             'listen_port': config['interface'].get('listen_port'),
-            'peers': peers
+            'peers': peers,
+            'auxiliary_data': {
+                'id': config['interface']['_id'],
+                'public_key': config['interface']['public_key'],
+            }
         }
 
         return output_config
@@ -90,25 +95,20 @@ class uDPUAPI(ConfigSource):
         response = requests.get(url)
         response.raise_for_status()
         raw_config = response.json()
-        self.interface_mapping = {
-            raw_config['interface']['name']: raw_config['interface']['_id']
-        }
+        #self.interface_mapping = {
+        #    raw_config['interface']['name']: raw_config['interface']['_id']
+        #}
         parsed_config = self._parse_from_upstream(raw_config)
         interface = wg.WireguardInterface.from_dict(parsed_config)
         return [interface]
 
-    def patch_public_key(self, interface_name: str, public_key: str):
-        """Makes a PATCH request to keymaster-server that updates the interface
-        by the name of `interface_name` with the public key `public_key`.
-        For uDPUAPI, `get_config` must be called before `patch_public_key`, since
-        `get_config` populates `self.interface_mapping` so that we can get `interface_id`
-        from `interface_name`."""
-        # get interface_id
-        try:
-            interface_id = self.interface_mapping[interface_name]
-        except KeyError:
-            LOGGER.error(f'interface {interface_name} is not in interface mapping')
-            return
+    def patch_public_key(self, interface: wg.WireguardInterface):
+        """Makes a PATCH request to keymaster-server that updates the public key of
+        the interface with the ID in the interface's auxiliary data. The new value of
+        the public key is that of the counterpart to the private key of `interface`."""
+        # get interface_id and public key
+        interface_id = interface.auxiliary_data['id']
+        public_key = wg.get_public_key(interface.private_key)
 
         # patch public key
         url = f'{self.url}/v1/interfaces/server/{interface_id}'
@@ -119,5 +119,5 @@ class uDPUAPI(ConfigSource):
         response.raise_for_status()
 
 
-class KeymasterAPI(ConfigSource):
+class KeymasterServer(ConfigSource):
     pass
