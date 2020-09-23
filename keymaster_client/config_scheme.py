@@ -18,10 +18,6 @@ class ConfigScheme(abc.ABC):
     system and return a representative instance."""
 
     @abc.abstractmethod
-    def interface_exists(self, interface_name: str) -> bool:
-        """Tests whether the interface with name `interface_name` exists."""
-
-    @abc.abstractmethod
     def interface_names(self) -> List[str]:
         """Returns the names of all currently-configured interfaces."""
 
@@ -57,7 +53,7 @@ class wgConfigScheme(ConfigScheme): # pylint: disable=invalid-name
         for tool in required_tools:
             subprocess.run(['which', tool], capture_output=True, check=True)
 
-    def interface_exists(self, interface_name: str) -> bool:
+    def _interface_exists(self, interface_name: str) -> bool:
         """Tests whether an interface with a specific name exists."""
         result = subprocess.run(['ip', 'link', 'show', interface_name],
                                 capture_output=True, check=False)
@@ -77,7 +73,7 @@ class wgConfigScheme(ConfigScheme): # pylint: disable=invalid-name
 
     def write(self, interface: wg.WireguardInterface):
         # create interface if not already there
-        if not self.interface_exists(interface.name):
+        if not self._interface_exists(interface.name):
             subprocess.run(['ip', 'link', 'add', interface.name, 'type', 'wireguard'],
                            capture_output=True, check=True)
 
@@ -136,7 +132,7 @@ class UCIConfigScheme(ConfigScheme):
         for tool in required_tools:
             run(['which', tool], capture_output=True, check=True)
 
-    def interface_exists(self, interface_name: str) -> bool:
+    def _interface_exists(self, interface_name: str) -> bool:
         """Tests whether the interface with name `interface_name` exists."""
         result = run(['uci', 'get', f'network.{interface_name}'], capture_output=True, check=False)
         return result.returncode == 0
@@ -161,7 +157,7 @@ class UCIConfigScheme(ConfigScheme):
         """Takes the name of a wireguard interface, pulls the necessary info from UCI,
         and returns a WireguardInterface from that info."""
         # check if network interface exists in UCI
-        if not self.interface_exists(interface_name):
+        if not self._interface_exists(interface_name):
             raise RuntimeError(f'interface {interface_name} is not present')
 
         # build dict from uci outputs
@@ -185,7 +181,7 @@ class UCIConfigScheme(ConfigScheme):
         """Takes the name of a wireguard peer node, pulls all related info from UCI,
         and builds a WireguardPeer from that info."""
         # check if peer node exists in UCI
-        if not self.interface_exists(node_name):
+        if not self._interface_exists(node_name):
             raise RuntimeError(f'node {node_name} is not present')
 
         # build dict from uci outputs
