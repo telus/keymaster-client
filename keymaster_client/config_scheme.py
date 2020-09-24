@@ -53,7 +53,14 @@ class wgConfigScheme(ConfigScheme): # pylint: disable=invalid-name
         for tool in required_tools:
             subprocess.run(['which', tool], capture_output=True, check=True)
 
-    def _interface_exists(self, interface_name: str) -> bool:
+    def interface_names(self) -> List[str]:
+        _, _, filename = next(os.walk(self.config_dir))
+        pattern = re.compile(r'([a-zA-Z0-9]+)\.conf')
+        names = [pattern.findall(name)[0] for name in filename if pattern.findall(name)]
+        return names
+
+    @staticmethod
+    def _interface_exists(interface_name: str) -> bool:
         """Tests whether an interface with a specific name exists."""
         result = subprocess.run(['ip', 'link', 'show', interface_name],
                                 capture_output=True, check=False)
@@ -101,12 +108,6 @@ class wgConfigScheme(ConfigScheme): # pylint: disable=invalid-name
         subprocess.run(['wg', 'setconf', interface.name, config_path],
                        capture_output=True, check=True)
 
-    def interface_names(self) -> List[str]:
-        _, _, filename = next(os.walk(self.config_dir))
-        pattern = re.compile(r'([a-zA-Z0-9]+)\.conf')
-        names = [pattern.findall(name)[0] for name in filename if pattern.findall(name)]
-        return names
-
     @staticmethod
     def _get_address_list(interface_name: str) -> List[str]:
         """Gets a list of configured IP addresses (both IPv4 and IPv6) that are configured
@@ -120,6 +121,14 @@ class wgConfigScheme(ConfigScheme): # pylint: disable=invalid-name
                     addresses.append(f"{addr['local']}/{addr['prefixlen']}")
         return addresses
 
+    def delete(self, interface_name: str):
+        if self._interface_exists(interface_name):
+            # we don't have to worry about deleting anything via the `wg` command,
+            # since deletion via `ip link` takes care of that
+            run(['ip', 'link', 'delete', interface_name], capture_output=True, check=True)
+            config_path = os.path.join(self.config_dir, f'{interface_name}.conf')
+            os.remove(config_path)
+
 
 class UCIConfigScheme(ConfigScheme):
     """`UCIConfigScheme` uses the OpenWrt project's `uci` (universal configuration
@@ -132,7 +141,15 @@ class UCIConfigScheme(ConfigScheme):
         for tool in required_tools:
             run(['which', tool], capture_output=True, check=True)
 
-    def _interface_exists(self, interface_name: str) -> bool:
+    def interface_names(self) -> List[str]:
+        result = subprocess.run(['uci', 'show', 'network'], capture_output=True, check=True)
+        network_config = result.stdout.decode()
+        pattern = re.compile(r"network\.([a-zA-Z0-9]+)\.proto='wireguard'")
+        interface_names = pattern.findall(network_config)
+        return interface_names
+
+    @staticmethod
+    def _interface_exists(interface_name: str) -> bool:
         """Tests whether the interface with name `interface_name` exists."""
         result = run(['uci', 'get', f'network.{interface_name}'], capture_output=True, check=False)
         return result.returncode == 0
@@ -279,9 +296,17 @@ class UCIConfigScheme(ConfigScheme):
                 peer_names.append(key.split('.')[1])
         return peer_names
 
-    def interface_names(self) -> List[str]:
-       result = subprocess.run(['uci', 'show', 'network'], capture_output=True, check=True)
-       network_config = result.stdout.decode()
-       pattern = re.compile(r"network\.([a-zA-Z0-9]+)\.proto='wireguard'")
-       interface_names = pattern.findall(network_config)
-       return interface_names
+    def delete(self, interface_name: str):
+        if self._interface_exists(interface_name):
+            # get list of nodes to delete
+            result = run(['uci', 'show', 'network'], capture_output=True, check=True)
+            raw_config = result.stdout.decode()
+            pattern = r"network\.([a-zA-Z0-9]+)='wireguard_" + interface_name + "'"
+            node_names = re.findall(pattern, raw_config)
+            node_names.append(interface_name)
+
+            # delete accumulated names
+            for name in node_names:
+                run(['uci', 'delete', f'network.{name}'], capture_output=True, check=True)
+
+            run(['uci', 'commit', 'network'], capture_output=True, check=True)
