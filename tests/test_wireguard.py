@@ -288,54 +288,65 @@ class TestWireguardInterface:
         with pytest.raises(TypeError):
             i = deepcopy(BASE_INTERFACE)
             i['name'] = 42
-            WireguardInterface.from_dict(i)
+            interface = WireguardInterface.from_dict(i)
+            interface.validate()
 
         # addresses
         with pytest.raises(TypeError):
             i = deepcopy(BASE_INTERFACE)
             i['addresses'] = '192.168.1.2/24'
-            WireguardInterface.from_dict(i)
+            interface = WireguardInterface.from_dict(i)
+            interface.validate()
         with pytest.raises(ValueError):
             i = deepcopy(BASE_INTERFACE)
             i['addresses'] = ['asdf']
-            WireguardInterface.from_dict(i)
+            interface = WireguardInterface.from_dict(i)
+            interface.validate()
         with pytest.raises(ValueError):
             i = deepcopy(BASE_INTERFACE)
             i['addresses'] = ['192.268.1.2/24']
-            WireguardInterface.from_dict(i)
+            interface = WireguardInterface.from_dict(i)
+            interface.validate()
         with pytest.raises(ValueError):
             i = deepcopy(BASE_INTERFACE)
             i['addresses'] = ['192.168.1.2']
-            WireguardInterface.from_dict(i)
+            interface = WireguardInterface.from_dict(i)
+            interface.validate()
         with pytest.raises(ValueError):
             i = deepcopy(BASE_INTERFACE)
             i['addresses'] = ['::8g:1/120']
-            WireguardInterface.from_dict(i)
+            interface = WireguardInterface.from_dict(i)
+            interface.validate()
         with pytest.raises(ValueError):
             i = deepcopy(BASE_INTERFACE)
             i['addresses'] = []
-            WireguardInterface.from_dict(i)
+            interface = WireguardInterface.from_dict(i)
+            interface.validate()
 
         # PrivateKey
         with pytest.raises(TypeError):
             i = deepcopy(BASE_INTERFACE)
             i['private_key'] = 42
-            WireguardInterface.from_dict(i)
+            interface = WireguardInterface.from_dict(i)
+            interface.validate()
 
         # ListenPort
         with pytest.raises(TypeError):
             i = deepcopy(BASE_INTERFACE)
             i['listen_port'] = 'asdf'
-            WireguardInterface.from_dict(i)
+            interface = WireguardInterface.from_dict(i)
+            interface.validate()
 
         # FwMark
         with pytest.raises(TypeError):
             i = deepcopy(BASE_INTERFACE)
             i['fw_mark'] = 'asdf'
-            WireguardInterface.from_dict(i)
+            interface = WireguardInterface.from_dict(i)
+            interface.validate()
 
         # peers
         with pytest.raises(TypeError):
             i = deepcopy(BASE_INTERFACE)
             i['peers'] = 'asdf'
-            WireguardInterface.from_dict(i)
+            interface = WireguardInterface.from_dict(i)
+            interface.validate()
