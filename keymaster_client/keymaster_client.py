@@ -12,6 +12,10 @@ LOGGER = logging.getLogger('keymaster_client')
 
 def sync_interfaces(config_source: ConfigSource, config_scheme: ConfigScheme,
                     private_key: str = None):
+    """Gets the list of interfaces that should be configured from the ConfigSource,
+    gets the list of interfaces that are currently configured from the ConfigScheme,
+    and compares/reconciles them. Also takes care of updating the public_key
+    for each interface in the ConfigSource."""
     # get list of currently-configured interfaces from config scheme
     current_iface_names = config_scheme.interface_names()
     current_ifaces = [config_scheme.read(name) for name in current_iface_names]
@@ -34,7 +38,7 @@ def sync_interfaces(config_source: ConfigSource, config_scheme: ConfigScheme,
     for desired_iface in desired_ifaces:
         current_iface_filtered = [x for x in current_ifaces if x.name == desired_iface.name]
         length = len(current_iface_filtered)
-        assert length == 0 or length == 1
+        assert length in (0, 1)
 
         if length == 0: # interface does not yet exist
             LOGGER.debug(f'interface {desired_iface}: creating interface')

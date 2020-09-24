@@ -81,8 +81,8 @@ class WireguardPeer:
                 raise ValueError(f'{self.endpoint} does not contain a valid hostname')
             try:
                 port = int(port)
-            except ValueError:
-                raise ValueError(f'"{port}" is not a valid port')
+            except ValueError as exc:
+                raise ValueError(f'"{port}" is not a valid port') from exc
             if port < 0 or port > 65535:
                 raise ValueError(f'"{port}" is not a valid port')
 
@@ -142,7 +142,7 @@ class WireguardPeer:
 
 
 @dataclass
-class WireguardInterface:
+class WireguardInterface: # pylint: disable=too-many-instance-attributes
     """Represents a wireguard Interface, along with any Peers that it may
     be able to route traffic to. Should not be instantiated directly unless
     you have a list of `WireguardPeer`s ready to pass to it. Can be instantiated
@@ -152,6 +152,11 @@ class WireguardInterface:
     `name`: the name of the wireguard interface
 
     `addresses`: a list of addresses, plus the prefix length
+
+    `validated`: a flag that tracks whether `validate()` has been called on the WireguardInterface
+
+    `auxiliary_data`: a dict that can be used for any extra data that needs to be
+        carried around with the WireguardInterface
 
     For the other fields, please refer to the wireguard documentation."""
     name: str

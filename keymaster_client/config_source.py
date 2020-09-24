@@ -3,7 +3,7 @@ import abc
 import logging
 
 from urllib.parse import urlparse
-from typing import List, Dict
+from typing import List
 
 import requests
 
@@ -13,9 +13,9 @@ LOGGER = logging.getLogger('keymaster_client')
 
 
 def _validate_url(url: str):
-    parsed_url = urlparse(self.url)
+    parsed_url = urlparse(url)
     if parsed_url.scheme == '' or parsed_url.netloc == '' or parsed_url.path != '':
-        msg = f'{self.url} is not a valid URL. Must be of the form <scheme>://<hostname>[:<port>]'
+        msg = f'{url} is not a valid URL. Must be of the form <scheme>://<hostname>[:<port>]'
         raise ValueError(msg)
 
 
@@ -36,7 +36,7 @@ class ConfigSource(abc.ABC):
         it in their [Peer] config."""
 
 
-class uDPUAPI(ConfigSource):
+class uDPUAPI(ConfigSource): # pylint: disable=invalid-name
     """Interfaces with the uDPU API."""
 
     def __init__(self, url: str, network_name: str):
@@ -113,6 +113,7 @@ class uDPUAPI(ConfigSource):
 
 
 class KeymasterServer(ConfigSource):
+    """Uses keymaster-server as the source of configuration."""
 
     def __init__(self, url: str, token: str):
         _validate_url(url)
@@ -127,15 +128,15 @@ class KeymasterServer(ConfigSource):
         raw_config = response.json()
         interfaces = []
         for raw_interface in raw_config:
-            pk = raw_config.pop('id')
+            identifier = raw_config.pop('id')
             public_key = raw_config.pop('public_key')
             interface = WireguardInterface.from_dict(raw_interface)
-            interface.auxiliary_data['id'] = pk
+            interface.auxiliary_data['id'] = identifier
             interface.auxiliary_data['old_public_key'] = public_key
             interfaces.append(interface)
         return interfaces
 
-    def patch_public_key(self, interface: wg.WireguardInterface):
+    def patch_public_key(self, interface: WireguardInterface):
         interface_id = interface.auxiliary_data['id']
         public_key = get_public_key(interface.private_key)
         url = f'{self.url}/api/interfaces/{interface_id}/'
