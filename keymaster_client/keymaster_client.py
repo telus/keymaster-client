@@ -35,12 +35,24 @@ def sync_interfaces(config_source: ConfigSource, config_scheme: ConfigScheme,
             LOGGER.debug(f'deleted iface {name}')
 
     # reconcile any differences in remaining interfaces
+    current_iface_mapping = {iface.name: iface for iface in current_ifaces}
     for desired_iface in desired_ifaces:
-        current_iface_filtered = [x for x in current_ifaces if x.name == desired_iface.name]
-        length = len(current_iface_filtered)
-        assert length in (0, 1)
 
-        if length == 0: # interface does not yet exist
+        if current_iface := current_iface_mapping.get(desired_iface.name): # interface exists
+            LOGGER.debug(f'interface {desired_iface}: updating interface')
+            desired_iface.private_key = private_key if private_key else current_iface.private_key
+            desired_iface.validate()
+            LOGGER.debug(f'interface {desired_iface}: interface valid')
+            if current_iface != desired_iface:
+                config_scheme.write(desired_iface)
+            LOGGER.debug(f'interface {desired_iface}: interface configured')
+            api_public_key = desired_iface.auxiliary_data.get('old_public_key')
+            desired_public_key = wg.get_public_key(desired_iface.private_key)
+            if api_public_key != desired_public_key:
+                config_source.patch_public_key(desired_iface)
+            LOGGER.debug(f'interface {desired_iface}: public key consistent')
+
+        else: # interface does not yet exist
             LOGGER.debug(f'interface {desired_iface}: creating interface')
             desired_iface.private_key = private_key if private_key else wg.generate_private_key()
             desired_iface.validate()
@@ -49,21 +61,6 @@ def sync_interfaces(config_source: ConfigSource, config_scheme: ConfigScheme,
             LOGGER.debug(f'interface {desired_iface}: interface configured')
             config_source.patch_public_key(desired_iface)
             LOGGER.debug(f'interface {desired_iface}: public key uploaded')
-
-        elif length == 1: # interface exists
-            LOGGER.debug(f'interface {desired_iface}: updating interface')
-            current_iface = current_iface_filtered[0]
-            desired_iface.private_key = private_key if private_key else current_iface.private_key
-            desired_iface.validate()
-            LOGGER.debug(f'interface {desired_iface}: interface valid')
-            if current_iface != desired_iface:
-                config_scheme.write(desired_iface)
-            LOGGER.debug(f'interface {desired_iface}: interface configured')
-            api_public_key = desired_iface.auxiliary_data['old_public_key']
-            desired_public_key = wg.get_public_key(desired_iface.private_key)
-            if api_public_key != desired_public_key:
-                config_source.patch_public_key(desired_iface)
-            LOGGER.debug(f'interface {desired_iface}: public key consistent')
 
 def main(config_source: ConfigSource, config_scheme: ConfigScheme, daemon_config: dict):
     """The main loop of the keymaster-client daemon."""
