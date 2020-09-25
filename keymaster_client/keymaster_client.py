@@ -49,6 +49,7 @@ def sync_interfaces(config_source: ConfigSource, config_scheme: ConfigScheme,
             api_public_key = desired_iface.auxiliary_data.get('old_public_key')
             desired_public_key = wg.get_public_key(desired_iface.private_key)
             if api_public_key != desired_public_key:
+                LOGGER.debug(f'interface {desired_iface}: PATCHing public key')
                 config_source.patch_public_key(desired_iface)
             LOGGER.debug(f'interface {desired_iface}: public key consistent')
 

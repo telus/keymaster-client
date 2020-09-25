@@ -128,8 +128,8 @@ class KeymasterServer(ConfigSource):
         raw_config = response.json()
         interfaces = []
         for raw_interface in raw_config:
-            identifier = raw_config.pop('id')
-            public_key = raw_config.pop('public_key')
+            identifier = raw_interface.pop('id')
+            public_key = raw_interface.pop('public_key')
             interface = WireguardInterface.from_dict(raw_interface)
             interface.auxiliary_data['id'] = identifier
             interface.auxiliary_data['old_public_key'] = public_key
@@ -140,6 +140,7 @@ class KeymasterServer(ConfigSource):
         interface_id = interface.auxiliary_data['id']
         public_key = get_public_key(interface.private_key)
         url = f'{self.url}/api/interfaces/{interface_id}/'
+        headers = {'Authorization': f'Token {self.token}'}
         payload = {'public_key': public_key}
-        response = requests.patch(url, json=payload)
+        response = requests.patch(url, headers=headers, json=payload)
         response.raise_for_status()
