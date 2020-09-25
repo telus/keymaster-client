@@ -91,7 +91,7 @@ def get_daemon_config(config_path: str) -> dict:
             config['wg'] = {}
         config['wg']['configDir'] = config['wg'].get('configDir', '/var/lib/keymaster_client/')
     elif config_scheme == 'uci':
-        config['uci'] = {}
+        config['uci'] = True
 
     # set defaults for keys that aren't required
     config['syncPeriod'] = config.get('syncPeriod', 60)
