@@ -19,14 +19,14 @@ LOGGER = logging.getLogger('keymaster_client')
 
 
 @click.command()
-@click.option('-f', '--config-dir', default='/etc/keymaster_client/', type=click.STRING,
+@click.option('-f', '--path-to-config', default='/etc/keymaster_client.yaml', type=click.STRING,
               help='Path to config directory')
 @click.option('-l', '--log-level', default='INFO', type=click.STRING,
               help='Acceptable values: WARN[ING], INFO, DEBUG, or ERROR. Defaults to INFO.')
-def main(config_dir: str, log_level: str):
+def main(path_to_config: str, log_level: str):
     """Configure keymaster-client using data from keymaster-server."""
-    daemon_config = get_daemon_config(config_dir)
     initialize_logging(getattr(logging, log_level.upper()))
+    daemon_config = get_daemon_config(path_to_config)
 
     if daemon_config.get('uDPUAPI'):
         url = daemon_config['uDPUAPI']['url']
@@ -38,15 +38,15 @@ def main(config_dir: str, log_level: str):
         config_source = KeymasterServer(url, token)
 
     if daemon_config.get('wg'):
-        wg_config_dir = daemon_config['wg']['configDir']
-        config_scheme = wgConfigScheme(wg_config_dir)
+        config_dir = daemon_config['wg']['configDir']
+        config_scheme = wgConfigScheme(config_dir)
     elif daemon_config.get('uci'):
         config_scheme = UCIConfigScheme()
 
     kc.main(config_source, config_scheme, daemon_config)
 
 
-def get_daemon_config(config_dir: str) -> dict:
+def get_daemon_config(config_path: str) -> dict:
     """Gets config from the config file. Config file format:
     ```
     ---
@@ -57,15 +57,13 @@ def get_daemon_config(config_dir: str) -> dict:
       url: ...
       token: ...
     wg:
-      configPath: ...
+      configDir: ...
     uci:
     privateKey: ...
     syncPeriod: ...
     ```
     There may be only one of uDPUAPI and keymasterServer, and only one of wg and uci.
     """
-    # read config
-    config_path = os.path.join(config_dir, 'config.yaml')
     try:
         with open(config_path, 'r') as infile:
             config = yaml.safe_load(infile)
@@ -74,27 +72,31 @@ def get_daemon_config(config_dir: str) -> dict:
         raise FileNotFoundError(msg) from exc
 
     # check for config scheme and config source
-    _ensure_exactly_one(config, ['uDPUAPI', 'keymasterServer'], 'ConfigScheme')
-    _ensure_exactly_one(config, ['wg', 'uci'], 'ConfigSource')
+    config_source = _ensure_exactly_one(config, ['uDPUAPI', 'keymasterServer'], 'ConfigSource')
+    config_scheme = _ensure_exactly_one(config, ['wg', 'uci'], 'ConfigScheme')
 
-    # check contents of uDPUAPI
-    if config.get('uDPUAPI'):
+    # check contents of config source
+    if config_source == 'uDPUAPI':
         if not config['uDPUAPI'].get('url'):
             raise AttributeError('uDPUAPI.url is required.')
-        config['uDPUAPI'] = config['uDPUAPI'].get('network_name', 'default')
-
-    # check contents of keymasterServer
-    if config.get('keymasterServer'):
+        config['uDPUAPI']['networkName'] = config['uDPUAPI'].get('networkName', 'default')
+    elif config_source == 'keymasterServer':
         for key in ['url', 'token']:
-            if not config['keymasterServer'].get(key):
+            if not key in config['keymasterServer'].keys():
                 raise AttributeError(f'keymasterServer.{key} is required.')
 
-    # check contents of wg
-    if config.get('wg'):
-        config['wg'] = config['wg'].get('configDir', config_dir)
+    # check contents of config scheme
+    if config_scheme == 'wg':
+        if not isinstance(config['wg'], dict):
+            config['wg'] = {}
+        config['wg']['configDir'] = config['wg'].get('configDir', '/var/lib/keymaster_client/')
+    elif config_scheme == 'uci':
+        config['uci'] = {}
 
     # set defaults for keys that aren't required
     config['syncPeriod'] = config.get('syncPeriod', 60)
+
+    LOGGER.debug(f'Parsed config: {config}')
 
     return config
 
@@ -111,16 +113,17 @@ def initialize_logging(level):
     LOGGER.debug(f"Initialized logging with level: {logging.getLevelName(level)}")
 
 
-def _ensure_exactly_one(config: dict, key_list: List[str], type_name: str):
+def _ensure_exactly_one(config: dict, key_list: List[str], type_name: str) -> str:
     """When passed a `config` as read in by pyyaml, verifies that exactly one of
     the keys passed in `key_list` is present. More or less than one raises an
     AttributeError. `type_name` is the name of the type configured by the keys
     passed in `key_list`."""
-    key_present = False
+    present_key = None
     for key in key_list:
-        if config.get(key):
-            if key_present:
+        if key in config.keys():
+            if present_key:
                 raise AttributeError(f'You cannot configure more than one {type_name}')
-            key_present = True
-    if not key_present:
-        raise AttributeError('You must configure at least one {type_name}')
+            present_key = key
+    if not present_key:
+        raise AttributeError(f'You must configure at least one {type_name}')
+    return present_key

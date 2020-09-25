@@ -47,6 +47,8 @@ class wgConfigScheme(ConfigScheme): # pylint: disable=invalid-name
     """
 
     def __init__(self, config_dir: str):
+        if not os.path.exists(config_dir):
+            os.makedirs(config_dir, exist_ok=True)
         self.config_dir = config_dir
         # validation
         required_tools = ['wg', 'ip']
