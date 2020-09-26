@@ -1,6 +1,7 @@
 """Contains the core logic of keymaster-client."""
 import time
 import logging
+import traceback
 
 import keymaster_client.wireguard as wg
 from keymaster_client.config_source import ConfigSource
@@ -69,7 +70,7 @@ def main(config_source: ConfigSource, config_scheme: ConfigScheme, daemon_config
         try:
             sync_interfaces(config_source, config_scheme,
                             private_key=daemon_config.get('private_key'))
-        except Exception as exc: # pylint: disable=broad-except
-            LOGGER.error(f'caught exception: {exc}')
+        except Exception: # pylint: disable=broad-except
+            LOGGER.error(f'caught exception:\n{traceback.format_exc()}')
         LOGGER.debug(f"Waiting {daemon_config['syncPeriod']} seconds until next sync")
         time.sleep(daemon_config['syncPeriod'])

@@ -225,7 +225,7 @@ class UCIConfigScheme(ConfigScheme):
         """Sets the node given by `node_name` to the value passed in `value` by using `uci set`.
         If `value` is of type `list`, then the `uci add_list` command is used for each element
         of `value`."""
-        if isinstance(value, str):
+        if isinstance(value, str) or isinstance(value, int):
             run(['uci', 'set', f'{node_name}={value}'], capture_output=True, check=True)
         elif isinstance(value, list):
             for element in value:
@@ -260,8 +260,9 @@ class UCIConfigScheme(ConfigScheme):
         for i, peer in enumerate(interface.peers):
             self._write_peer(peer, interface.name, i)
 
-        # commit changes
+        # realize changes
         run(['uci', 'commit', 'network'], capture_output=True, check=True)
+        run(['/etc/init.d/network', 'restart'], capture_output=True, check=True)
 
     def _write_peer(self, peer: wg.WireguardPeer, interface_name: str, peer_number: int):
         """Writes a WireguardPeer to UCI. Peer record in UCI does not need to be
@@ -290,7 +291,6 @@ class UCIConfigScheme(ConfigScheme):
         lines = result.stdout.decode().strip().split('\n')
         peer_names = []
         for line in lines:
-            print(line)
             sep_index = line.index('=')
             key = line[:sep_index]
             value = line[sep_index+1:]
