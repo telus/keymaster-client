@@ -1,8 +1,6 @@
 # -*- coding: utf-8 -*-
 """Console script for udpu_client."""
-
 import logging
-import os
 import sys
 
 from typing import List

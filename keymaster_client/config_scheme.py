@@ -225,7 +225,7 @@ class UCIConfigScheme(ConfigScheme):
         """Sets the node given by `node_name` to the value passed in `value` by using `uci set`.
         If `value` is of type `list`, then the `uci add_list` command is used for each element
         of `value`."""
-        if isinstance(value, str) or isinstance(value, int):
+        if isinstance(value, (str, int)):
             run(['uci', 'set', f'{node_name}={value}'], capture_output=True, check=True)
         elif isinstance(value, list):
             for element in value:
