@@ -3,7 +3,7 @@
 keymaster-client is the client portion of the keymaster wireguard
 key distribution solution. This readme is limited to configuration of
 the keymaster-client daemon; for an overview and general information
-please see [the keymaster-server repo(https://github.com/telus/keymaster-server).
+please see [the keymaster-server repo](https://github.com/telus/keymaster-server).
 
 
 ## Configuration
@@ -17,26 +17,30 @@ path in the `-f` or `--path-to-config` flags.
 ```
 ---
 keymasterServer:
-  url:
-  networkName:
+  url: https://example.com:5300
+  token: a-fake-token
 wg:
-  configDir:
+  configDir: /var/different/directory/
 syncPeriod: 30
 ```
 
 ### Configuration Reference
 
-**keymasterServer**
+**`keymasterServer`**
 
 If present, indicates that the `keymasterServer` ConfigSource is to be used.
 Cannot be used at the same time as the uDPUAPI ConfigSource.
 
-**keymasterServer.url**
+--------------------------------------------------------------------------------
+
+**`keymasterServer.url`**
 
 Required if `keymasterServer` is specified. The complete URL of the
 keymaster-server deployment.
 
-**keymasterServer.token**
+--------------------------------------------------------------------------------
+
+**`keymasterServer.token`**
 
 Required if `keymasterServer` is specified. The token to use in requests to
 the keymaster-server deployment. This token can be obtained from the
@@ -44,23 +48,27 @@ keymaster-server web UI.
 
 --------------------------------------------------------------------------------
 
-**uDPUAPI**
+**`uDPUAPI`**
 
 A ConfigSource for a proprietary system. Cannot be used at the same time as
 the keymasterServer ConfigSource.
 
-**uDPUAPI.url**
+--------------------------------------------------------------------------------
+
+**`uDPUAPI.url`**
 
 Required if `uDPUAPI` is specified. The complete URL of the uDPU API deployment.
 
-**uDPUAPI.networkName**
+--------------------------------------------------------------------------------
+
+**`uDPUAPI.networkName`**
 
 Required if `uDPUAPI` is specified. The network name to request config for on the
 uDPU API.
 
 --------------------------------------------------------------------------------
 
-**uci**
+**`uci`**
 
 A ConfigScheme that uses OpenWrt's UCI (Universal Configuration Interface) to
 configure wireguard interfaces. Has no options. Cannot be used at the same time
@@ -69,22 +77,24 @@ as the `wg` ConfigScheme. For more information on UCI please see
 
 --------------------------------------------------------------------------------
 
-**wg**
+**`wg`**
 
 A ConfigScheme that uses the `ip` and `wg` commands to configure wireguard
 interfaces on the host running keymaster-client. Cannot be used at the same
 time as the `wg` ConfigScheme.
 
-**wg.configDir**
+--------------------------------------------------------------------------------
 
-Optional; default: /var/lib/keymaster_client/
+**`wg.configDir`**
+
+Optional. Default: /var/lib/keymaster_client/
 
 The directory in which configuration is stored after syncing with the
 ConfigSource.
 
 --------------------------------------------------------------------------------
 
-**privateKey**
+**`privateKey`**
 
 Optional.
 
@@ -97,7 +107,7 @@ interfaces connecting to them.
 
 --------------------------------------------------------------------------------
 
-**syncPeriod**
+**`syncPeriod`**
 
 Optional. Default: 60
 
