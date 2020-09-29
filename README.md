@@ -11,7 +11,7 @@ please see [the keymaster-server repo](https://github.com/telus/keymaster-server
 To install keymaster-client:
 
 ```
-pip install keymaster_client
+pip install keymaster-client
 ```
 
 To run keymaster-client, first create a configuration (see below) and then run:
