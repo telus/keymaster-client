@@ -6,6 +6,21 @@ the keymaster-client daemon; for an overview and general information
 please see [the keymaster-server repo](https://github.com/telus/keymaster-server).
 
 
+## Installation & Usage
+
+To install keymaster-client:
+
+```
+pip install keymaster_client
+```
+
+To run keymaster-client, first create a configuration (see below) and then run:
+
+```
+keymaster_client
+```
+
+
 ## Configuration
 
 By default, keymaster-client looks for configuration at the path
@@ -115,16 +130,15 @@ Lets you specify the interval, in seconds, at which keymaster-client requests
 configuration from the ConfigSource.
 
 
-## Installation & Usage
+## Extending
 
-To install keymaster-client:
+keymaster-client provides two interfaces that make it easy to modify:
 
-```
-pip install keymaster_client
-```
+A **`ConfigScheme`** specifies how wireguard configurations are written to,
+and read from, the Node.
 
-To run keymaster-client:
+A **`ConfigSource`** tells keymaster-client how to get configuration of
+wireguard interfaces. This can take the form of a local file, a remote server,
+or anything else you can imagine.
 
-```
-keymaster_client
-```
+For more information, please see the code.
