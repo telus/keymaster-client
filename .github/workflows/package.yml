@@ -30,7 +30,7 @@ jobs:
         run: |
           # failures in the set-env command don't cause the workflow to fail.
           # calling this and then running set-env should flag up errors
-          echo "::set-env name=PYPI_TOKEN::$(credstash get pypi-keymaster-token)"
+          echo "::set-env name=PYPI_TOKEN::$(credstash get pypi-keymaster-client-token)"
         env:
           AWS_ACCESS_KEY_ID: ${{ secrets.CREDSTASH_ACCESS_KEY }}
           AWS_SECRET_ACCESS_KEY: ${{ secrets.CREDSTASH_SECRET_KEY }}
