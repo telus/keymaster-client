@@ -47,9 +47,8 @@ def _separate_peers(lines: List[str]) -> Iterable[List[str]]:
 @dataclass
 class WireguardPeer:
     """Represents a single Peer in a wireguard configuration. Can
-    be instantiated directly, from a uci config using `from_uci`,
-    or from a list of strings that correspond to a single peer in
-    wireguard configuration file format.
+    be instantiated directly, or from a list of strings that correspond
+    to a single peer in wireguard configuration file format.
 
     For an understanding of what each field of this object does,
     please refer to the wireguard documentation."""
@@ -82,8 +81,8 @@ class WireguardPeer:
                 raise ValueError(f'{self.endpoint} does not contain a valid hostname')
             try:
                 port = int(port)
-            except ValueError:
-                raise ValueError(f'"{port}" is not a valid port')
+            except ValueError as exc:
+                raise ValueError(f'"{port}" is not a valid port') from exc
             if port < 0 or port > 65535:
                 raise ValueError(f'"{port}" is not a valid port')
 
@@ -143,29 +142,34 @@ class WireguardPeer:
 
 
 @dataclass
-class WireguardInterface:
+class WireguardInterface: # pylint: disable=too-many-instance-attributes
     """Represents a wireguard Interface, along with any Peers that it may
     be able to route traffic to. Should not be instantiated directly unless
     you have a list of `WireguardPeer`s ready to pass to it. Can be instantiated
-    from a dict with `from_dict`, from a uci config using `from_uci`,
-    or from a file-like object that contains wireguard configuration in the wireguard
-    configuration file format.
+    from a dict with `from_dict`, or from a file-like object that contains
+    wireguard configuration in the wireguard configuration file format.
 
     `name`: the name of the wireguard interface
 
     `addresses`: a list of addresses, plus the prefix length
 
+    `validated`: a flag that tracks whether `validate()` has been called on the WireguardInterface
+
+    `auxiliary_data`: a dict that can be used for any extra data that needs to be
+        carried around with the WireguardInterface
+
     For the other fields, please refer to the wireguard documentation."""
     name: str
     addresses: List[str]
-    private_key: str
+    private_key: str = None
     listen_port: int = None
     fw_mark: int = None
     peers: List[WireguardPeer] = field(default_factory=list)
+    validated: bool = False
+    auxiliary_data: dict = field(default_factory=dict)
 
-    def __post_init__(self):
-        """Runs after __init__, which is created using the `dataclass` decorator.
-        Here, its sole purpose is data validation."""
+    def validate(self):
+        """Validates the `WireguardInterface`. Should be called before using the instance."""
         if not isinstance(self.name, str):
             raise TypeError('interface name must be a string')
 
@@ -177,6 +181,8 @@ class WireguardInterface:
             ip_interface(ip_str)
             _, _ = ip_str.split('/')
 
+        if not self.private_key:
+            raise ValueError('private_key must be present')
         if not isinstance(self.private_key, str):
             raise TypeError(f'private_key must be a string but is of type {type(self.private_key)}')
 
@@ -192,6 +198,8 @@ class WireguardInterface:
 
         if not isinstance(self.peers, list):
             raise TypeError('peers must be a list')
+
+        self.validated = True
 
     @classmethod
     def from_wireguard_config_file(cls, name: str, addresses: List[str],

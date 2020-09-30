@@ -1,99 +1,76 @@
 """Contains the core logic of keymaster-client."""
 import time
 import logging
+import traceback
 
 import keymaster_client.wireguard as wg
-from keymaster_client.keymaster_api import KeymasterAPI
+from keymaster_client.config_source import ConfigSource
 from keymaster_client.config_scheme import ConfigScheme
 
 
 LOGGER = logging.getLogger('keymaster_client')
 
 
-def parse_from_upstream(config: dict) -> dict:
-    """Takes the config that keymaster-server returns and puts
-    it into a format that can be consumed by WireguardInterface.from_dict."""
-    # peers
-    peers = []
-    for peer in config['peers']:
-        if peer.get('public_key') is not None:
-            output_peer = {
-                'public_key': peer['public_key'],
-                'allowed_ips': peer['allowed_ips'],
-                'endpoint': peer.get('endpoint'),
-                'persistent_keepalive': peer.get('persistent_keepalive')
-            }
-            peers.append(output_peer)
+def sync_interfaces(config_source: ConfigSource, config_scheme: ConfigScheme,
+                    private_key: str = None):
+    """Gets the list of interfaces that should be configured from the ConfigSource,
+    gets the list of interfaces that are currently configured from the ConfigScheme,
+    and compares/reconciles them. Also takes care of updating the public_key
+    for each interface in the ConfigSource."""
+    # get list of currently-configured interfaces from config scheme
+    current_iface_names = config_scheme.interface_names()
+    current_ifaces = [config_scheme.read(name) for name in current_iface_names]
+    for current_iface in current_ifaces:
+        current_iface.validate()
+    LOGGER.debug(f'current interfaces: {current_ifaces}')
 
-    # interface
-    output_config = {
-        'name': config['interface']['name'],
-        'addresses': config['interface']['addresses'],
-        'listen_port': config['interface'].get('listen_port'),
-        'peers': peers
-    }
+    # get list of desired interfaces and their names from config source
+    desired_ifaces = config_source.get_config()
+    desired_iface_names = [iface.name for iface in desired_ifaces]
+    LOGGER.debug(f'desired interfaces: {desired_ifaces}')
 
-    return output_config
+    # delete any interfaces whose name is not in desired interfaces
+    for name in current_iface_names:
+        if not name in desired_iface_names:
+            config_scheme.delete(name)
+            LOGGER.debug(f'deleted iface {name}')
 
+    # reconcile any differences in remaining interfaces
+    current_iface_mapping = {iface.name: iface for iface in current_ifaces}
+    for desired_iface in desired_ifaces:
 
-def configure_wireguard_interface(server: KeymasterAPI, config_scheme: ConfigScheme,
-                                  wg_config: dict, private_key: str = None):
-    """An idempotent function that compares the current configured interface
-    (if previously configured) to the one represented by `wg_config`, which
-    is meant to be received from keymaster-server. Always leaves the interface
-    in the state described by `wg_config`, with one exception: when `private_key`
-    is defined. In this case, `private_key` takes precedence over any other
-    private key present. This is so that keymaster-client can be made to
-    have the same configuration on multiple servers.
+        if current_iface := current_iface_mapping.get(desired_iface.name): # interface exists
+            LOGGER.debug(f'interface {desired_iface}: updating interface')
+            desired_iface.private_key = private_key if private_key else current_iface.private_key
+            desired_iface.validate()
+            LOGGER.debug(f'interface {desired_iface}: interface valid')
+            if current_iface != desired_iface:
+                config_scheme.write(desired_iface)
+            LOGGER.debug(f'interface {desired_iface}: interface configured')
+            api_public_key = desired_iface.auxiliary_data.get('old_public_key')
+            desired_public_key = wg.get_public_key(desired_iface.private_key)
+            if api_public_key != desired_public_key:
+                LOGGER.debug(f'interface {desired_iface}: PATCHing public key')
+                config_source.patch_public_key(desired_iface)
+            LOGGER.debug(f'interface {desired_iface}: public key consistent')
 
-    An addition purpose of `configure_wireguard_interface` is to notify
-    keymaster-server of any changes to the public key for the interface
-    it configures."""
-    api_interface_id = wg_config['interface']['_id']
-    interface_name = wg_config['interface']['name']
-    api_public_key = wg_config['interface'].get('public_key')
+        else: # interface does not yet exist
+            LOGGER.debug(f'interface {desired_iface}: creating interface')
+            desired_iface.private_key = private_key if private_key else wg.generate_private_key()
+            desired_iface.validate()
+            LOGGER.debug(f'interface {desired_iface}: interface valid')
+            config_scheme.write(desired_iface)
+            LOGGER.debug(f'interface {desired_iface}: interface configured')
+            config_source.patch_public_key(desired_iface)
+            LOGGER.debug(f'interface {desired_iface}: public key uploaded')
 
-    if config_scheme.interface_exists(interface_name):
-
-        current_interface = config_scheme.read(interface_name)
-
-        formatted_api_config = parse_from_upstream(wg_config)
-        if private_key is not None:
-            formatted_api_config['private_key'] = private_key
-        else:
-            formatted_api_config['private_key'] = current_interface.private_key
-        api_interface = wg.WireguardInterface.from_dict(formatted_api_config)
-
-        if current_interface != api_interface:
-            config_scheme.write(api_interface)
-
-        current_public_key = wg.get_public_key(api_interface.private_key)
-        if api_public_key != current_public_key:
-            server.patch_server_public_key(api_interface_id, current_public_key)
-
-    else:
-        formatted_api_config = parse_from_upstream(wg_config)
-        if private_key is not None:
-            formatted_api_config['private_key'] = private_key
-        else:
-            formatted_api_config['private_key'] = wg.generate_private_key()
-        new_interface = wg.WireguardInterface.from_dict(formatted_api_config)
-
-        config_scheme.write(new_interface)
-        LOGGER.debug(f'interface {interface_name}: interface configured')
-        new_public_key = wg.get_public_key(new_interface.private_key)
-        server.patch_server_public_key(api_interface_id, new_public_key)
-        LOGGER.debug(f'interface {interface_name}: public key uploaded')
-
-
-def main(server: KeymasterAPI, config_scheme: ConfigScheme, daemon_config: dict):
+def main(config_source: ConfigSource, config_scheme: ConfigScheme, daemon_config: dict):
     """The main loop of the keymaster-client daemon."""
     while True:
         try:
-            wg_config = server.get_config(daemon_config['network_name'])
-            configure_wireguard_interface(server, config_scheme, wg_config,
-                                          private_key=daemon_config.get('private_key'))
-        except Exception as exc: # pylint: disable=broad-except
-            LOGGER.error(f'caught exception: {exc}')
-        LOGGER.debug(f"Waiting {daemon_config['sync_period']} seconds until next sync")
-        time.sleep(daemon_config['sync_period'])
+            sync_interfaces(config_source, config_scheme,
+                            private_key=daemon_config.get('private_key'))
+        except Exception: # pylint: disable=broad-except
+            LOGGER.error(f'caught exception:\n{traceback.format_exc()}')
+        LOGGER.debug(f"Waiting {daemon_config['syncPeriod']} seconds until next sync")
+        time.sleep(daemon_config['syncPeriod'])

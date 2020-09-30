@@ -3,6 +3,7 @@ import abc
 import subprocess
 import json
 import os
+import re
 
 from typing import List, Union
 from subprocess import run
@@ -17,8 +18,8 @@ class ConfigScheme(abc.ABC):
     system and return a representative instance."""
 
     @abc.abstractmethod
-    def interface_exists(self, interface_name: str) -> bool:
-        """Tests whether the interface with name `interface_name` exists."""
+    def interface_names(self) -> List[str]:
+        """Returns the names of all currently-configured interfaces."""
 
     @abc.abstractmethod
     def read(self, interface_name: str) -> wg.WireguardInterface:
@@ -28,6 +29,10 @@ class ConfigScheme(abc.ABC):
     @abc.abstractmethod
     def write(self, interface: wg.WireguardInterface):
         """Writes a WireguardInterface to the system."""
+
+    @abc.abstractmethod
+    def delete(self, interface_name: str):
+        """Deletes the interface by the name of `interface_name` from the system."""
 
 
 class wgConfigScheme(ConfigScheme): # pylint: disable=invalid-name
@@ -42,13 +47,22 @@ class wgConfigScheme(ConfigScheme): # pylint: disable=invalid-name
     """
 
     def __init__(self, config_dir: str):
+        if not os.path.exists(config_dir):
+            os.makedirs(config_dir, exist_ok=True)
         self.config_dir = config_dir
         # validation
         required_tools = ['wg', 'ip']
         for tool in required_tools:
             subprocess.run(['which', tool], capture_output=True, check=True)
 
-    def interface_exists(self, interface_name: str) -> bool:
+    def interface_names(self) -> List[str]:
+        _, _, filename = next(os.walk(self.config_dir))
+        pattern = re.compile(r'([a-zA-Z0-9]+)\.conf')
+        names = [pattern.findall(name)[0] for name in filename if pattern.findall(name)]
+        return names
+
+    @staticmethod
+    def _interface_exists(interface_name: str) -> bool:
         """Tests whether an interface with a specific name exists."""
         result = subprocess.run(['ip', 'link', 'show', interface_name],
                                 capture_output=True, check=False)
@@ -68,7 +82,7 @@ class wgConfigScheme(ConfigScheme): # pylint: disable=invalid-name
 
     def write(self, interface: wg.WireguardInterface):
         # create interface if not already there
-        if not self.interface_exists(interface.name):
+        if not self._interface_exists(interface.name):
             subprocess.run(['ip', 'link', 'add', interface.name, 'type', 'wireguard'],
                            capture_output=True, check=True)
 
@@ -109,6 +123,14 @@ class wgConfigScheme(ConfigScheme): # pylint: disable=invalid-name
                     addresses.append(f"{addr['local']}/{addr['prefixlen']}")
         return addresses
 
+    def delete(self, interface_name: str):
+        if self._interface_exists(interface_name):
+            # we don't have to worry about deleting anything via the `wg` command,
+            # since deletion via `ip link` takes care of that
+            run(['ip', 'link', 'delete', interface_name], capture_output=True, check=True)
+            config_path = os.path.join(self.config_dir, f'{interface_name}.conf')
+            os.remove(config_path)
+
 
 class UCIConfigScheme(ConfigScheme):
     """`UCIConfigScheme` uses the OpenWrt project's `uci` (universal configuration
@@ -121,7 +143,15 @@ class UCIConfigScheme(ConfigScheme):
         for tool in required_tools:
             run(['which', tool], capture_output=True, check=True)
 
-    def interface_exists(self, interface_name: str) -> bool:
+    def interface_names(self) -> List[str]:
+        result = subprocess.run(['uci', 'show', 'network'], capture_output=True, check=True)
+        network_config = result.stdout.decode()
+        pattern = re.compile(r"network\.([a-zA-Z0-9]+)\.proto='wireguard'")
+        interface_names = pattern.findall(network_config)
+        return interface_names
+
+    @staticmethod
+    def _interface_exists(interface_name: str) -> bool:
         """Tests whether the interface with name `interface_name` exists."""
         result = run(['uci', 'get', f'network.{interface_name}'], capture_output=True, check=False)
         return result.returncode == 0
@@ -146,7 +176,7 @@ class UCIConfigScheme(ConfigScheme):
         """Takes the name of a wireguard interface, pulls the necessary info from UCI,
         and returns a WireguardInterface from that info."""
         # check if network interface exists in UCI
-        if not self.interface_exists(interface_name):
+        if not self._interface_exists(interface_name):
             raise RuntimeError(f'interface {interface_name} is not present')
 
         # build dict from uci outputs
@@ -170,7 +200,7 @@ class UCIConfigScheme(ConfigScheme):
         """Takes the name of a wireguard peer node, pulls all related info from UCI,
         and builds a WireguardPeer from that info."""
         # check if peer node exists in UCI
-        if not self.interface_exists(node_name):
+        if not self._interface_exists(node_name):
             raise RuntimeError(f'node {node_name} is not present')
 
         # build dict from uci outputs
@@ -195,7 +225,7 @@ class UCIConfigScheme(ConfigScheme):
         """Sets the node given by `node_name` to the value passed in `value` by using `uci set`.
         If `value` is of type `list`, then the `uci add_list` command is used for each element
         of `value`."""
-        if isinstance(value, str):
+        if isinstance(value, (str, int)):
             run(['uci', 'set', f'{node_name}={value}'], capture_output=True, check=True)
         elif isinstance(value, list):
             for element in value:
@@ -230,8 +260,9 @@ class UCIConfigScheme(ConfigScheme):
         for i, peer in enumerate(interface.peers):
             self._write_peer(peer, interface.name, i)
 
-        # commit changes
+        # realize changes
         run(['uci', 'commit', 'network'], capture_output=True, check=True)
+        run(['/etc/init.d/network', 'restart'], capture_output=True, check=True)
 
     def _write_peer(self, peer: wg.WireguardPeer, interface_name: str, peer_number: int):
         """Writes a WireguardPeer to UCI. Peer record in UCI does not need to be
@@ -260,10 +291,24 @@ class UCIConfigScheme(ConfigScheme):
         lines = result.stdout.decode().strip().split('\n')
         peer_names = []
         for line in lines:
-            print(line)
             sep_index = line.index('=')
             key = line[:sep_index]
             value = line[sep_index+1:]
             if value == f'wireguard_{interface_name}':
                 peer_names.append(key.split('.')[1])
         return peer_names
+
+    def delete(self, interface_name: str):
+        if self._interface_exists(interface_name):
+            # get list of nodes to delete
+            result = run(['uci', 'show', 'network'], capture_output=True, check=True)
+            raw_config = result.stdout.decode()
+            pattern = r"network\.([a-zA-Z0-9]+)='wireguard_" + interface_name + "'"
+            node_names = re.findall(pattern, raw_config)
+            node_names.append(interface_name)
+
+            # delete accumulated names
+            for name in node_names:
+                run(['uci', 'delete', f'network.{name}'], capture_output=True, check=True)
+
+            run(['uci', 'commit', 'network'], capture_output=True, check=True)
