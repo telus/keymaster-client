@@ -45,7 +45,7 @@ jobs:
           # failures in the set-env command don't cause the workflow to fail.
           # calling this and then running set-env should flag up errors
           _PAT=$(credstash get github_token)
-          echo "::set-env name=GITHUB_PAT::${_PAT}"
+          echo "GITHUB_PAT=${_PAT}" >> $GITHUB_ENV
         env:
           AWS_ACCESS_KEY_ID: ${{ secrets.CREDSTASH_ACCESS_KEY }}
           AWS_SECRET_ACCESS_KEY: ${{ secrets.CREDSTASH_SECRET_KEY }}
