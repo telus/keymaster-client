@@ -1,3 +1,6 @@
+# Archived 2025-01-23
+No longer supported
+
 # keymaster-client
 
 keymaster-client is the client portion of the keymaster wireguard
